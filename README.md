@@ -1,8 +1,4 @@
-# DE 2팀 레포지토리입니다.
-
-reudekx
-sanyapark
-minjacho42
+# DE 2팀 리포지토리입니다.
 
 <table width="100%">
 <tbody><tr>
