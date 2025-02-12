@@ -1,3 +1,4 @@
+import json
 import random
 import requests
 import urllib.parse
@@ -12,22 +13,25 @@ BASE_URL = "https://www.clien.net"
 SEARCH_URL = "/service/search?q={}&sort=recency&p={}&boardCd=&isBoard=false"
 BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
-# 설정: 람다 기본 로깅
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
+TRIAL_LIMIT = 10
 
 def fetch_html(url: str) -> str:
     """URL로부터 HTML 콘텐츠를 가져옵니다."""
-    try:
-        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
-        # print(f"Final URL: {response.url}")
-        logging.info(f"{response.status_code} from {url}")
-        if response.status_code != 200:
-            logging.error(f"Failed to fetch URL: {url} - Status Code: {response.status_code}")
-            return ""
-        return response.text
-    except requests.exceptions.TooManyRedirects as e:
-        print("Too many redirects:", e)
+    i = 0
+    while i < TRIAL_LIMIT:
+        try:
+            response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
+            logging.info(f"{response.status_code} from {url}")
+            if response.status_code != 200:
+                i += 1
+                continue
+            return response.text
+        except requests.exceptions.TooManyRedirects as e:
+            i += 1
+            print("Too many redirects:", e)
+            time.sleep(random.randint(*SLEEP_SECONDS))
+            print("Retrying...")
+    return ""
 
 
 def parse_rows(rows, target_date: datetime.date) -> dict:
@@ -61,14 +65,14 @@ def main_crawler(keyword: str, date: str) -> dict:
     page_number = 0
     urls = {}
 
-    while True:
+    while page_number < 50:
         # URL 생성 및 요청
         search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, page_number)
         logging.info(f"Fetching URL: {search_url}")
         html_content = fetch_html(search_url)
         if not html_content:
-            break  # HTTP 요청 실패 시 종료
-
+            logging.error(f"failed to fetch {search_url}")
+            continue
         # 응답 파싱 및 필터링
         soup = BeautifulSoup(html_content, "html.parser")
         rows = soup.select("div.list_item.symph_row.jirum")
@@ -91,7 +95,7 @@ def main_crawler(keyword: str, date: str) -> dict:
 def lambda_handler(event, context):
     """
     AWS Lambda 핸들러 함수.
-    키워드를 기반으로 크롤링된 게시글 HTML 콘텐츠를 AWS S3에 업로드합니다.
+    키워드를 기반으로 크롤링된 게시글 json 콘텐츠를 AWS S3에 업로드합니다.
 
     :param event: Lambda 호출 시 입력된 데이터 (car_id, keywords, date, bucket_name 포함).
     :param context: Lambda 실행 환경과 관련된 컨텍스트 정보.
@@ -110,9 +114,19 @@ def lambda_handler(event, context):
             for id, url in urls.items():
                 html_content = fetch_html(url)
                 if not html_content:
+                    logging.error(f"failed to fetch {url}")
                     continue
-                s3.Object(bucket_name, f"extracted/{car_id}/{date}/post/clien/{id}.html").put(Body=html_content)
-                logging.info(f"put extracted/{car_id}/{date}/post/clien/{id}.html to s3")
+                dump_data = {
+                    'url' : url,
+                    'html' : html_content,
+                }
+                json_body = json.dumps(
+                    dump_data,
+                    ensure_ascii=False,
+                    indent=4
+                )
+                s3.Object(bucket_name, f"extracted/{car_id}/{date}/raw/clien/{id}.json").put(Body=json_body)
+                logging.info(f"put extracted/{car_id}/{date}/raw/clien/{id}.json to s3")
                 time.sleep(random.randint(1, 3))
     except Exception as e:
         logging.error(e)
