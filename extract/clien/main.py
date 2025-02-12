@@ -12,11 +12,13 @@ BASE_URL = "https://www.clien.net"
 SEARCH_URL = "/service/search?q={}&sort=recency&p={}&boardCd=&isBoard=false"
 BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
+# 설정: 람다 기본 로깅
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def fetch_html(url: str) -> str:
     """URL로부터 HTML 콘텐츠를 가져옵니다."""
-    response = requests.get(url)
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
     logging.info(f"{response.status_code} from {url}")
     if response.status_code != 200:
         logging.error(f"Failed to fetch URL: {url} - Status Code: {response.status_code}")
