@@ -18,12 +18,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 def fetch_html(url: str) -> str:
     """URL로부터 HTML 콘텐츠를 가져옵니다."""
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
-    logging.info(f"{response.status_code} from {url}")
-    if response.status_code != 200:
-        logging.error(f"Failed to fetch URL: {url} - Status Code: {response.status_code}")
-        return ""
-    return response.text
+    try:
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
+        # print(f"Final URL: {response.url}")
+        logging.info(f"{response.status_code} from {url}")
+        if response.status_code != 200:
+            logging.error(f"Failed to fetch URL: {url} - Status Code: {response.status_code}")
+            return ""
+        return response.text
+    except requests.exceptions.TooManyRedirects as e:
+        print("Too many redirects:", e)
 
 
 def parse_rows(rows, target_date: datetime.date) -> dict:
