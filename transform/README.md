@@ -1,1 +1,1 @@
-#transform을 위한 코드입니다.
+# Transform을 위한 디렉토리입니다.
