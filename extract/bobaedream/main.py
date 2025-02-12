@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import os
+import json
 from urllib.parse import urljoin
 import boto3
 from botocore.exceptions import ClientError
@@ -9,7 +10,6 @@ import logging
 
 def _get_soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "html.parser")
-
 
 def _fetch_search_results(
     collection: str, keyword: str, page: int, start_date: str
@@ -35,8 +35,8 @@ def _fetch_search_results(
     }
 
     response = requests.post(url, data=params, headers=headers)
-    response.raise_for_status()  # HTTP 오류 체크
-    response.encoding = "utf-8"  # 인코딩 설정
+    response.raise_for_status()
+    response.encoding = "utf-8"
 
     return response.text
 
@@ -81,34 +81,37 @@ def _fetch_post(url: str) -> str:
     response.encoding = "utf-8"
     return response.text
 
-def _save_post(post: str, post_id: str, car_id: str, date: str):
-    os.makedirs(f"extracted/{car_id}/{date}/html/bobaedream", exist_ok=True)
-    with open(f"extracted/{car_id}/{date}/html/bobaedream/{post_id}.html", "w", encoding="utf-8") as f:
-        f.write(post)
+def _save_post_json(post_data: dict, post_id: str, car_id: str, date: str):
+    os.makedirs(f"extracted/{car_id}/{date}/raw/bobaedream", exist_ok=True)
+    with open(f"extracted/{car_id}/{date}/raw/bobaedream/{post_id}.json", "w", encoding="utf-8") as f:
+        json.dump(post_data, f, ensure_ascii=False, indent=2)
 
 def extract_at_local(car_id: str, keyword: str, date: str):
     logging.info(f"Extracting: {keyword}, {date}")
     post_urls = get_post_urls(keyword, date)
     logging.info(f"Total {len(post_urls)} posts found.")
     for post_id, post_url in post_urls:
-        post = _fetch_post(post_url)
-        _save_post(post, post_id, car_id, date)
+        post_html = _fetch_post(post_url)
+        post_data = {
+            "url": post_url,
+            "html": post_html
+        }
+        _save_post_json(post_data, post_id, car_id, date)
         logging.info(f"Extracted: {post_url}")
 
-def _save_to_s3(content: str, bucket: str, key: str):
+def _save_to_s3(content: dict, bucket: str, key: str):
     s3_client = boto3.client('s3')
     try:
         s3_client.put_object(
             Bucket=bucket,
             Key=key,
-            Body=content.encode('utf-8'),
-            ContentType='text/html',
+            Body=json.dumps(content, ensure_ascii=False).encode('utf-8'),
+            ContentType='application/json',
             ContentEncoding='utf-8'
         )
     except ClientError as e:
         logging.error(f"Error saving to S3: {e}")
         raise
-
 
 def extract(car_id: str, keyword: str, date: str, bucket: str):
     logging.info(f"Extracting: {keyword}, {date}")
@@ -117,14 +120,16 @@ def extract(car_id: str, keyword: str, date: str, bucket: str):
     
     for post_id, post_url in post_urls:
         try:
-            # Fetch post content
-            post = _fetch_post(post_url)
+            post_html = _fetch_post(post_url)
             
-            # Define S3 key
-            s3_key = f"{car_id}/{date}/html/bobaedream/{post_id}.html"
+            post_data = {
+                "url": post_url,
+                "html": post_html
+            }
             
-            # Save to S3
-            _save_to_s3(post, bucket, s3_key)
+            s3_key = f"{car_id}/{date}/raw/bobaedream/{post_id}.json"
+            
+            _save_to_s3(post_data, bucket, s3_key)
             
             logging.info(f"Saved to S3: {s3_key}")
             
@@ -186,7 +191,7 @@ if __name__ == "__main__":
     
     car_id = "santafe"
     keywords = ["싼타페", "산타페"]
-    date = "2025-02-12"
+    date = "2025-02-10"
     
     for keyword in keywords:
         extract_at_local(car_id, keyword, date)
