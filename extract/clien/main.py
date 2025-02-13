@@ -10,7 +10,7 @@ import boto3
 
 # 상수 정의
 BASE_URL = "https://www.clien.net"
-SEARCH_URL = "/service/search?q={}&sort=recency&p={}&boardCd=&isBoard=false"
+SEARCH_URL = "/service/search?q={}&sort=recency&p={}&boardCd=cm_car&isBoard=true"
 BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
 TRIAL_LIMIT = 10
@@ -26,9 +26,10 @@ def fetch_html(url: str) -> str:
                 i += 1
                 continue
             return response.text
-        except requests.exceptions.TooManyRedirects as e:
+        except Exception as e:
             i += 1
-            print("Too many redirects:", e)
+            logging.warning(f"{e} from {url}")
+            print(f"{e} from {url}")
             time.sleep(random.randint(*SLEEP_SECONDS))
             print("Retrying...")
     return ""
