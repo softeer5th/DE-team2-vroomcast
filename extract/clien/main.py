@@ -7,6 +7,7 @@ from datetime import datetime
 import time
 import logging
 import boto3
+from parse_html import get_post_dict
 
 # 상수 정의
 BASE_URL = "https://www.clien.net"
@@ -93,12 +94,21 @@ def main_crawler(keyword: str, date: str) -> dict:
     logging.info(f"Extracted {len(urls)} URLs.")
     return urls
 
+def save_to_s3(s3, bucket, object_key, data):
+    """Save a JSON object to S3."""
+    s3.put_object(
+        Bucket=bucket,
+        Key=object_key,
+        Body=json.dumps(data, indent=4, ensure_ascii=False),
+        ContentType='application/json'
+    )
+
 def lambda_handler(event, context):
     """
     AWS Lambda 핸들러 함수.
     키워드를 기반으로 크롤링된 게시글 json 콘텐츠를 AWS S3에 업로드합니다.
 
-    :param event: Lambda 호출 시 입력된 데이터 (car_id, keywords, date, bucket_name 포함).
+    :param event: Lambda 호출 시 입력된 데이터 (car_id, keywords, date, bucket 포함).
     :param context: Lambda 실행 환경과 관련된 컨텍스트 정보.
     :return: Lambda 실행 결과를 담은 JSON 응답.
     """
@@ -106,9 +116,10 @@ def lambda_handler(event, context):
     car_id = event["car_id"]
     keywords = event["keywords"]
     date = event["date"]
-    bucket_name = event["bucket_name"]
+    bucket = event["bucket"]
     try:
         s3 = boto3.resource("s3")
+        print(keywords)
         for keyword in keywords:
             logging.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
             urls = main_crawler(keyword, date)
@@ -117,16 +128,13 @@ def lambda_handler(event, context):
                 if not html_content:
                     logging.error(f"failed to fetch {url}")
                     continue
-                dump_data = {
-                    'url' : url,
-                    'html' : html_content,
-                }
+                dump_data = get_post_dict(html_content, id, url)
                 json_body = json.dumps(
                     dump_data,
                     ensure_ascii=False,
                     indent=4
                 )
-                s3.Object(bucket_name, f"extracted/{car_id}/{date}/raw/clien/{id}.json").put(Body=json_body)
+                s3.Object(bucket, f"extracted/{car_id}/{date}/raw/clien/{id}.json").put(Body=json_body)
                 logging.info(f"put extracted/{car_id}/{date}/raw/clien/{id}.json to s3")
                 time.sleep(random.randint(1, 3))
     except Exception as e:
