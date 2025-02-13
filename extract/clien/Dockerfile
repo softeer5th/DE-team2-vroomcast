@@ -6,6 +6,7 @@ WORKDIR /var/task
 
 # 소스 코드 추가
 COPY main.py .
+COPY parse_html.py .
 
 # 의존성 파일 복사 (requirements.txt가 있다면 사용)
 COPY requirements.txt .
