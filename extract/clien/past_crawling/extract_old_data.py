@@ -271,3 +271,20 @@ def lambda_handler(event, context):
             "keywords": keywords,
         },
     }
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    # Sample event and context for testing
+    sample_event = {
+        "car_id": "santa_fe",
+        "keywords": ["싼타페", "산타페", "santafe"],
+        "date": "2023-11-21",
+        "bucket": "hmg-5th-crawling-test",
+        "months": 1
+    }
+    sample_context = {}  # Empty context object for testing
+    # Call lambda_handler with the sample event and context
+    response = lambda_handler(sample_event, sample_context)
+    # Print the response
+    print(response)
+    

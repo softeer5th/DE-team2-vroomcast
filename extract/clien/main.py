@@ -160,3 +160,15 @@ def lambda_handler(event, context):
             "date":date
         }
     }
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    event_json = {
+      "car_id": "ioniq9",
+      "keywords": [
+        "아이오닉"
+      ],
+      "date": "2025-02-12",
+      "bucket": "hmg-5th-crawling-test"
+    }
+    lambda_handler(event_json, "")
