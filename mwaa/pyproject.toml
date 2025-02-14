@@ -12,6 +12,10 @@ apache-airflow = "^2.10.5"
 apache-airflow-providers-amazon = {version = "9.0.0", extras = ["aiobotocore"]}
 
 
+[tool.poetry.group.dev.dependencies]
+black = "^25.1.0"
+isort = "^6.0.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
