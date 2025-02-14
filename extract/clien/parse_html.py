@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 import re
 import logging
-import json
+from datetime import datetime
 
 # 태그 및 CSS 셀렉터 상수 정의
 CONTENT_VIEW_TAG = 'div.content_view'
@@ -67,6 +67,7 @@ def get_post_dict(html_file, file_id, url):
         content_date = extract_optional_text(content, DATE_TAG)
         if content_date:
             content_date = ' '.join(content_date.split()[:2])
+            content_date = datetime.strptime(content_date, "%Y-%m-%d %H:%M:%S").isoformat()
         else:
             logging.warning(f"게시글 날짜를 찾을 수 없습니다.")
 
@@ -90,11 +91,14 @@ def get_post_dict(html_file, file_id, url):
         """
         comment_dict_list = []
         for comment_tag in comment_tags:
+            if "blocked" in comment_tag['class']:
+                continue
             comment_id = comment_tag['data-comment-sn']
             content = normalize_text(comment_tag.select_one('div.comment_view').text)
             is_reply = "re" in comment_tag['class']
             created_at = comment_tag.select_one('span.timestamp').text.strip()
             created_at = ' '.join(created_at.split(' ')[:2]) if created_at else None
+            created_at = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S").isoformat() if created_at else None
             upvote_count = int(comment_tag.select_one('button.comment_symph').text)
             comment_dict_list.append({
                 "comment_id": int(comment_id),
@@ -113,7 +117,7 @@ def get_post_dict(html_file, file_id, url):
             "content": content_article,
             "created_at": content_date,
             "view_count": int(view_count.replace(',', '')) if view_count else None,
-            "upvote_count": int(upvote_count) if upvote_count else None,
+            "upvote_count": int(upvote_count) if upvote_count == 0 or upvote_count else None,
             "downvote_count": None,
             "comment_count": int(comment_count) if comment_count else None,
             "comments": comment_dict_list,

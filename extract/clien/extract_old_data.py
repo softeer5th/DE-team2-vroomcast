@@ -104,7 +104,29 @@ def get_target_date_page_num(date: str, span: int = 100):
             page_number += abs(span)  # 과거(페이지 번호 증가)
         time.sleep(random.randint(*SLEEP_SECONDS))
 
-def main_crawler(keyword: str, date: str, months: int = 1) -> dict:
+def save_json_to_s3(car_id, urls, s3, bucket):
+    for content_id, (post_url, post_date) in urls.items():
+        html_content = fetch_html(post_url)  # 게시글 HTML 가져오기
+        if not html_content:
+            logging.error(f"Failed to fetch content from {post_url}. Skipping.")
+            continue
+
+        # JSON 덤프 데이터 생성
+        dump_data = get_post_dict(html_content, content_id, post_url)
+        json_body = json.dumps(dump_data, ensure_ascii=False, indent=4)
+
+        # S3 객체 경로 정의
+        object_key = f"extracted/{car_id}/{str(post_date)}/raw/clien/{content_id}.json"
+        logging.info(f"Uploading to S3: {object_key}")
+
+        # S3에 업로드
+        s3.Object(bucket, object_key).put(Body=json_body)
+        logging.info(f"Uploaded successfully: {object_key}")
+
+        # 요청 대기 시간 추가 (Rate-Limiting)
+        time.sleep(random.randint(1, 3))
+
+def main_crawler(keywords: list, date: str, s3, car_id, bucket, months: int = 1,) -> dict:
     """
     지정된 키워드와 타겟 날짜부터 N개월간의 게시글 URL을 크롤링합니다.
     :param date: 시작 기준 타겟 날짜 (형식: "%Y-%m-%d")
@@ -159,8 +181,10 @@ def main_crawler(keyword: str, date: str, months: int = 1) -> dict:
             if post_date > end_date:
                 logging.info(f"Post dated {post_date} is before end_date {end_date}. Stopping crawl.")
                 return urls  # 조건 범위를 벗어나면 크롤링 종료
-            if keyword in title:
-                urls[content_id] = (post_url, post_date)
+            for keyword in keywords:
+                if keyword in title:
+                    urls[content_id] = (post_url, post_date)
+                    break
 
         # 가장 오래된 게시글이 종료 조건에 도달했는지 확인
         oldest_post_date = min(value[1] for _, value in page_urls.items())
@@ -171,12 +195,12 @@ def main_crawler(keyword: str, date: str, months: int = 1) -> dict:
         # 다음 페이지로 이동 (점진적으로 과거 탐색)
         page_number -= 1  # 미래로 이동
         logging.info(f"Moving to the next page: {page_number}")
+        if len(urls) > 20:
+            save_json_to_s3(car_id=car_id, urls=urls, s3=s3, bucket=bucket)
+            urls.clear()
         time.sleep(random.randint(*SLEEP_SECONDS))  # 요청 사이에 짧은 대기
-
-    logging.info(f"Crawling complete. Extracted {len(urls)} URLs.")
+    save_json_to_s3(car_id=car_id, urls=urls, s3=s3, bucket=bucket)
     return urls
-
-
 
 def lambda_handler(event, context):
     """
@@ -215,39 +239,11 @@ def lambda_handler(event, context):
     try:
         # AWS S3 리소스 생성
         s3 = boto3.resource("s3")
-
         # 각 키워드에 대해 크롤링 시작
-        for keyword in keywords:
-            logging.info(f"[CRAWLER] Started crawling for keyword: {keyword}, date: {date}, car_id: {car_id}")
-
-            # main_crawler 호출: URL 크롤링
-            urls = main_crawler(keyword=keyword, date=date, months=months)
-            if not urls:
-                logging.warning(f"No data found for keyword: {keyword}, date: {date}")
-                continue
-            print(urls)
-            # URLs에 대한 S3 업로드 로직 처리
-            for content_id, (post_url, post_date) in urls.items():
-                html_content = fetch_html(post_url)  # 게시글 HTML 가져오기
-                if not html_content:
-                    logging.error(f"Failed to fetch content from {post_url}. Skipping.")
-                    continue
-
-                # JSON 덤프 데이터 생성
-                dump_data = get_post_dict(html_content, content_id, post_url)
-                json_body = json.dumps(dump_data, ensure_ascii=False, indent=4)
-
-                # S3 객체 경로 정의
-                object_key = f"extracted/{car_id}/{str(post_date)}/raw/clien/{content_id}.json"
-                logging.info(f"Uploading to S3: {object_key}")
-
-                # S3에 업로드
-                s3.Object(bucket, object_key).put(Body=json_body)
-                logging.info(f"Uploaded successfully: {object_key}")
-
-                # 요청 대기 시간 추가 (Rate-Limiting)
-                time.sleep(random.randint(1, 3))
-
+        logging.info(f"[CRAWLER] Started crawling for keyword: {keywords}, date: {date}, car_id: {car_id}")
+        # main_crawler 호출: URL 크롤링
+        leftover_urls = main_crawler(keywords=keywords, date=date, months=months, s3=s3, car_id=car_id, bucket=bucket)
+        save_json_to_s3(car_id=car_id, urls=leftover_urls, s3=s3, bucket=bucket)
     except Exception as e:
         # 예외 처리: 에러 상세 로그 저장
         logging.error(f"Error occurred during Lambda execution: {e}")

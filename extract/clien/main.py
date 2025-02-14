@@ -16,12 +16,14 @@ BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
 TRIAL_LIMIT = 10
 
+logging.basicConfig(level=logging.INFO)
+
 def fetch_html(url: str) -> str:
     """URL로부터 HTML 콘텐츠를 가져옵니다."""
     i = 0
     while i < TRIAL_LIMIT:
         try:
-            response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
+            response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0"}, allow_redirects=True)
             logging.info(f"{response.status_code} from {url}")
             if response.status_code != 200:
                 i += 1
@@ -119,7 +121,6 @@ def lambda_handler(event, context):
     bucket = event["bucket"]
     try:
         s3 = boto3.resource("s3")
-        print(keywords)
         for keyword in keywords:
             logging.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
             urls = main_crawler(keyword, date)
