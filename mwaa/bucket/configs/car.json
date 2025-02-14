@@ -1,0 +1,22 @@
+[
+    {
+        "car_id": "santafe",
+        "keywords": [
+            "싼타페",
+            "산타페"
+        ]
+    },
+    {
+        "car_id": "kona",
+        "keywords": [
+            "코나"
+        ]
+    },
+    {
+        "car_id": "tucson",
+        "keywords": [
+            "투싼",
+            "투산"
+        ]
+    }
+]
