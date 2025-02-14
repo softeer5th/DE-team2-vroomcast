@@ -101,6 +101,7 @@ def get_post_dict(html_file, file_id, url):
                 "is_reply": is_reply,
                 "created_at": created_at,
                 "upvote_count": upvote_count,
+                "downvote_count": None,
             })
 
         # 결과 딕셔너리 생성
@@ -112,6 +113,7 @@ def get_post_dict(html_file, file_id, url):
             "created_at": content_date,
             "view_count": int(view_count.replace(',', '')) if view_count else None,
             "upvote_count": int(upvote_count) if upvote_count else None,
+            "downvote_count": None,
             "comment_count": int(comment_count) if comment_count else None,
             "comments": comment_dict_list,
         }
