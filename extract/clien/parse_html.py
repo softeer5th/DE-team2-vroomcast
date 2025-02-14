@@ -94,6 +94,7 @@ def get_post_dict(html_file, file_id, url):
             content = normalize_text(comment_tag.select_one('div.comment_view').text)
             is_reply = "re" in comment_tag['class']
             created_at = comment_tag.select_one('span.timestamp').text.strip()
+            created_at = ' '.join(created_at.split(' ')[:2]) if created_at else None
             upvote_count = int(comment_tag.select_one('button.comment_symph').text)
             comment_dict_list.append({
                 "comment_id": int(comment_id),
