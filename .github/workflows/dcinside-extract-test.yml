@@ -1,4 +1,4 @@
-name: Deploy Test Lambda For Clien
+name: Deploy Test Lambda For DCinside
 
 on:
   pull_request:
@@ -9,19 +9,18 @@ on:
 jobs:
   deploy-test-lambda:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'extract/clien'
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'extract/dcinside'
+
     permissions:
       id-token: write  # GitHub OIDC 사용을 위한 설정
       contents: read
 
     env:
-      TARGET_DIR: "extract/clien"
+      TARGET_DIR: "extract/dcinside"
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
-      with:
-        ref: ${{ github.event.pull_request.head.ref }}
 
     - name: Configure AWS Credentials using OIDC
       uses: aws-actions/configure-aws-credentials@v2
