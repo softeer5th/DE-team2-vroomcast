@@ -8,6 +8,9 @@ from botocore.exceptions import ClientError
 from post_extractor import extract_post
 from post_info_list_extractor import get_post_infos
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 COMMUNITY = "bobaedream"
 SAVE_PATH = "extracted/{car_id}/{date}/raw/{community}/{post_id}.json"
 
@@ -23,7 +26,7 @@ def _save_to_s3(post: dict, bucket: str, key: str):
             ContentEncoding="utf-8",
         )
     except ClientError as e:
-        logging.error(f"Error saving to S3: {e}")
+        logger.error(f"Error saving to S3: {e}")
         raise
 
 
@@ -36,15 +39,13 @@ def _extract(bucket: str, car_id: str, keyword: str, date: str) -> None:
             car_id=car_id, date=date, community=COMMUNITY, post_id=post_info["id"]
         )
         _save_to_s3(post, bucket, s3_key)
-        logging.info(f"Saved to S3: {s3_key}")
+        logger.info(f"Saved to S3: {s3_key}")
 
 
 def lambda_handler(event, context):
     start_time = datetime.now()
 
     try:
-        logging.basicConfig(level=logging.INFO)
-
         bucket = event.get("bucket")
         car_id = event.get("car_id")
         keywords = event.get("keywords")
@@ -70,7 +71,7 @@ def lambda_handler(event, context):
             },
         }
     except Exception as e:
-        logging.error(f"Error in lambda_handler: {e}")
+        logger.error(f"Error in lambda_handler: {e}")
         end_time = datetime.now()
         duration = end_time - start_time
 
