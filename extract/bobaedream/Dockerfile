@@ -4,7 +4,7 @@ FROM public.ecr.aws/lambda/python:3.11
 WORKDIR /var/task
 
 # 소스 코드 복사
-COPY main.py .
+COPY main.py post_extractor.py post_info_list_extractor.py ./
 
 # Python 패키지 설치
 RUN pip install --no-cache-dir beautifulsoup4 requests
