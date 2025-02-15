@@ -1,13 +1,21 @@
 import json
 
-from post_info_extractor import (_fetch_search_result, _find_start_page,
-                                 get_post_infos)
-
-from post_extractor import (_get_soup, _parse_comments,
-                            _parse_post_comment_count, _parse_post_content,
-                            _parse_post_created_at, _parse_post_title,
-                            _parse_post_upvote_count, _parse_post_view_count,
-                            extract_post)
+from post_extractor import (
+    _get_soup,
+    _parse_comments,
+    _parse_post_comment_count,
+    _parse_post_content,
+    _parse_post_created_at,
+    _parse_post_title,
+    _parse_post_upvote_count,
+    _parse_post_view_count,
+    extract_post,
+)
+from post_info_list_extractor import (
+    _fetch_search_result,
+    _find_start_page,
+    get_post_infos,
+)
 
 
 def test_post_extractor():

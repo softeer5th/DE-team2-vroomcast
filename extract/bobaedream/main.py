@@ -4,9 +4,9 @@ from datetime import datetime
 
 import boto3
 from botocore.exceptions import ClientError
-from post_info_extractor import get_post_infos
 
 from post_extractor import extract_post
+from post_info_list_extractor import get_post_infos
 
 COMMUNITY = "bobaedream"
 SAVE_PATH = "extracted/{car_id}/{date}/raw/{community}/{post_id}.json"
