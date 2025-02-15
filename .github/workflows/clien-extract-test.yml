@@ -14,6 +14,9 @@ jobs:
       id-token: write  # GitHub OIDC 사용을 위한 설정
       contents: read
 
+    env:
+      TARGET_DIR: "extract/clien"
+
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
@@ -31,7 +34,6 @@ jobs:
 
     - name: Build & Push Test Lambda Image
       run: |
-        TARGET_DIR="extract/clien"  # 특정 디렉토리 설정
         LAMBDA_NAME=$(basename $TARGET_DIR)
         TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
         IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME:latest"
@@ -54,9 +56,18 @@ jobs:
           --image-uri $IMAGE_URI \
           --region ap-northeast-2
 
+    - name: Wait for Lambda to be Active
+      run: |
+        LAMBDA_NAME=$(basename $TARGET_DIR)
+        TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
+        while [[ "$(aws lambda get-function-configuration --function-name "$TEST_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
+          echo "Lambda is still pending... waiting 5 seconds"
+          sleep 3
+        done
+        echo "Lambda is ready!"
+
     - name: Invoke Test Lambda
       run: |
-        TARGET_DIR="extract/clien"
         LAMBDA_NAME=$(basename $TARGET_DIR)
         TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
         echo "Invoking Test Lambda: $TEST_LAMBDA_NAME"
