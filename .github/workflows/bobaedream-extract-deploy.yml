@@ -1,0 +1,68 @@
+name: Deploy Lambda For Bobaedream
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'extract/bobaedream/**'
+  workflow_dispatch:
+
+jobs:
+  deploy-lambda:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # GitHub OIDC 사용을 위한 설정
+      contents: read
+
+    env:
+      TARGET_DIR: "extract/bobaedream"
+      DEPLOY_LAMBDA_NAME: "vroomcast-lambda-extract-bobaedream"
+      DEPLOY_IMAGE_NAME: "extract-bobaedream"
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.ref }}
+
+    - name: Configure AWS Credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ap-northeast-2
+
+    - name: Login to Amazon ECR
+      run: |
+        aws ecr get-login-password --region ap-northeast-2 | \
+        docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_REGISTRY }}
+
+    - name: Build & Push Deploy Lambda Image
+      run: |
+        IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$DEPLOY_IMAGE_NAME:latest"
+
+        echo "Building & Deploying Deploy Lambda: $DEPLOY_IMAGE_NAME"
+        docker build -t vroomcast/$DEPLOY_IMAGE_NAME $TARGET_DIR
+        docker tag vroomcast/$DEPLOY_IMAGE_NAME:latest $IMAGE_URI
+        docker push $IMAGE_URI
+
+        echo "Creating or Updating Deploy Lambda: $DEPLOY_LAMBDA_NAME"
+        aws lambda create-function \
+          --function-name $DEPLOY_LAMBDA_NAME \
+          --package-type Image \
+          --code ImageUri=$IMAGE_URI \
+          --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
+          --timeout 300 \
+          --region ap-northeast-2 || \
+        aws lambda update-function-code \
+          --function-name $DEPLOY_LAMBDA_NAME \
+          --image-uri $IMAGE_URI \
+          --region ap-northeast-2
+
+    - name: Wait for Lambda to be Active
+      run: |
+        while [[ "$(aws lambda get-function-configuration --function-name "$DEPLOY_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
+          echo "Lambda is still pending... waiting 3 seconds"
+          sleep 3
+        done
+        echo "Lambda is ready!"
