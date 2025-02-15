@@ -1,0 +1,52 @@
+name: Deploy Test Lambda For Extractors
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed_dirs: ${{ steps.detect.outputs.changed_dirs }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Detect Changed Directories
+        id: detect
+        run: |
+          CHANGED_DIRS=$(git diff --name-only origin/dev ${{ github.sha }} | grep '^extract/' | cut -d '/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          echo "Changed directories: $CHANGED_DIRS"
+          echo "changed_dirs=$CHANGED_DIRS" >> $GITHUB_ENV
+
+  dispatch-tests:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Extractor Tests
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const workflows = {
+              "clien": "clien-extract-test.yml",
+              "dcinside": "dcinside-extract-test.yml",
+              "bobaedream": "bobaedream-extract-test.yml"
+            };
+
+            const changedDirs = ${{ env.changed_dirs }};
+            console.log("Changed directories:", changedDirs);
+
+            for (const dir of JSON.parse(changedDirs)) {
+              if (workflows[dir]) {
+                console.log(`Triggering workflow: ${workflows[dir]}`);
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: workflows[dir],
+                  ref: "dev"
+                });
+              }
+            }
