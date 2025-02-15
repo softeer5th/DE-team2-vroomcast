@@ -1,2 +1,6 @@
 .venv
-extracted
+
+__pycache__
+.pytest_cache
+
+sample
