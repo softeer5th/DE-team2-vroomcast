@@ -1,15 +1,15 @@
-name: Deploy Test Lambda For Clien
+name: Deploy Test Lambda For DCinside
 
 on:
-#  push:
-#    branches:
-#      - extract/dcinside  # develop 브랜치에 push될 때 실행
+  pull_request:
+    branches:
+      - dev
   workflow_dispatch:
-  workflow_call:
 
 jobs:
   deploy-test-lambda:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'extract/dcinside'
 
     permissions:
       id-token: write  # GitHub OIDC 사용을 위한 설정
