@@ -52,7 +52,6 @@ jobs:
         aws lambda update-function-code \
           --function-name $TEST_LAMBDA_NAME \
           --image-uri $IMAGE_URI \
-          --timeout 180 \
           --region ap-northeast-2
 
     - name: Invoke Test Lambda
