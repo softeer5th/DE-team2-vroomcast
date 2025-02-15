@@ -1,10 +1,11 @@
 name: Deploy Test Lambda For Clien
 
 on:
-  push:
-    branches:
-      - extract/clien  # develop 브랜치에 push될 때 실행
+#  push:
+#    branches:
+#      - extract/clien  # develop 브랜치에 push될 때 실행
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   deploy-test-lambda:
