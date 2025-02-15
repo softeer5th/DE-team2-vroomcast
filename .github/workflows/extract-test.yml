@@ -36,7 +36,7 @@ jobs:
               "bobaedream": "bobaedream-extract-test.yml"
             };
 
-            const changedDirs = ${{ env.changed_dirs }};
+            const changedDirs = JSON.parse('${{ toJson(env.changed_dirs) }}');
             console.log("Changed directories:", changedDirs);
 
             for (const dir of JSON.parse(changedDirs)) {
