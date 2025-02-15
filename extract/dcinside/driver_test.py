@@ -1,7 +1,9 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+import time
+from bs4 import BeautifulSoup
+# from webdriver_manager.chrome import ChromeDriverManager
 def _get_driver():
     # 이 path는 로컬 실행 시 주석처리 하세요.
     chrome_path = "/opt/chrome/chrome-headless-shell-linux64"
@@ -26,4 +28,16 @@ def _get_driver():
     return driver
 
 if __name__=="__main__":
+    print("Starting Test ...")
     driver = _get_driver()
+    
+    if driver:
+        driver.get("https://namu.wiki/")
+        time.sleep(1)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        door = soup.select_one("span.OXif9nG5").get_text()
+        print(door)
+        print("Test Successfully Ended")
+        driver.quit()
+    else:
+        print("Something Wrong in Code")

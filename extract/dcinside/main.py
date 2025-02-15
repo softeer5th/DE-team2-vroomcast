@@ -1,23 +1,20 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-# from webdriver_manager.chrome import ChromeDriverManager # chrome브라우저 버전에 맞는 드라이버인지 확인 및 없으면 다운로드
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-import time, json, logging, requests, os, random
+import time, json, logging, requests, os
 from bs4 import BeautifulSoup
-import boto3
+import boto3, random
 
 logging.basicConfig(level=logging.INFO)  # 로그 레벨 설정
 logger = logging.getLogger(__name__)
 
-# BUCKET_NAME = "hmg-5th-crawling-test"
 
 BASE_URL = "https://gall.dcinside.com/board/lists/?id=car_new1"
 WAIT_TIME = 2
@@ -26,34 +23,80 @@ WAIT_TIME = 2
 SEARCH_URL_TITLE = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=search_subject&s_keyword="
 SEARCH_URL_TITLE_AND_CONTENT = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=search_subject_memo&s_keyword="  
 
+def aws_lambda_logging_ok(log_text):
+    return {
+        'statusCode': 200,
+        'body': log_text#'✅ File uploaded successfully'
+    }
+    
+def aws_lambda_logging_fail(log_text):
+    return {
+        'statusCode': 500,
+        'body': log_text#'✅ File uploaded successfully'
+    }  
+    
 def convert_date_format(date_str):
-    """YY.MM.DD 형식을 YY-MM-DD 형식으로 변환합니다."""
-    year, month, day = date_str.split('.')
-    return f"{year}-{month}-{day}"
+    # date_str = str(md_to_ymd(date_str))
+    return str(date_str).split(' ')[0][2:]
 
-def is_date_in_range(date_str, start_date_str, end_date_str):
+def md_to_ymd(date_str:str):
+    try:
+        date = datetime.strptime(date_str, '%y.%m.%d')
+        return date
+    except :
+        try:
+            date_str = datetime.strptime(date_str, "%m.%d")
+            current_year = datetime.now().year
+            date = date_str.replace(year=current_year)
+            return date
+        except ValueError:
+            print("Invalid date format")
+            return False
+
+def is_date_in_range(date:datetime, start_date_str, end_date_str):
     """
     주어진 날짜 문자열이 특정 날짜 범위 안에 있는지 확인합니다 (dateutil 사용).
 
     Args:
-        date_str: 검사할 날짜 문자열 (예: '23.08.17')
+        date_str: 검사할 날짜 문자열 (예: '23.08.17' | '02.15')
         start_date_str: 시작 날짜 문자열 (예: '2023-08-16')
         end_date_str: 종료 날짜 문자열 (예: '2023-11-16')
 
     Returns:
         bool: 날짜가 범위 안에 있으면 True, 아니면 False
     """
-    try:
-        # dateutil을 사용하여 날짜 문자열을 datetime 객체로 변환
-        date = datetime.strptime(date_str, '%y.%m.%d')
-        start_date = parser.parse(start_date_str)
-        end_date = parser.parse(end_date_str)
+    
+    start_date = parser.parse(start_date_str)
+    end_date = parser.parse(end_date_str)    
+    return start_date <= date <= end_date
 
-        # 날짜 범위 안에 있는지 확인
-        return start_date <= date <= end_date
-    except ValueError:
-        # logger.error("Error occured while parsing date")
-        return False  # 날짜 형식이 잘못된 경우 False 반환
+    # try:
+    #     # '%y.%m.%d' type
+    #     date = datetime.strptime(date_str, '%y.%m.%d')
+    #     start_date = parser.parse(start_date_str)
+    #     end_date = parser.parse(end_date_str)
+
+    #     # 날짜 범위 안에 있는지 확인
+    #     return start_date <= date <= end_date
+
+    # except ValueError:
+    #     try: # '%m.%d' type -> 올해 작성된 글은 년도 표기가 빠져있다.
+    #         datetime.strptime(date_str, "%m.%d")
+    #         current_year = datetime.now().year % 100
+    #         date_str = f"{current_year:02d}.{date_str}" #'%y.%m.%d' type으로 변환
+            
+    #         date = datetime.strptime(date_str, '%y.%m.%d')
+    #         start_date = parser.parse(start_date_str)
+    #         end_date = parser.parse(end_date_str)
+
+    #         # 날짜 범위 안에 있는지 확인
+    #         return start_date <= date <= end_date
+        
+    #     except ValueError:
+    #         print("Invalid date format")
+    #         # logger.error("Error occured while parsing date")
+    #         return False  # 날짜 형식이 잘못된 경우 False 반환
+    
     
 class DC_crawler:
     MAX_TRY = 2
@@ -73,12 +116,12 @@ class DC_crawler:
     # Chrome WebDriver 선언, Lambda 적용 시 주석 필히 보고 해제할 것!!!!!
     def _get_driver(self,):
         # 이 path는 로컬 실행 시 주석처리 하세요.
-        chrome_path = "/opt/chrome/chrome-headless-shell-mac-arm64"
+        # chrome_path = "/opt/chrome/chrome-headless-shell-mac-arm64"
         # driver_path = "/opt/chromedriver"   
 
         options = webdriver.ChromeOptions()
-        options.binary_location = chrome_path  # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
-        options.add_argument("--headless=new")  # Headless 모드
+        
+        options.add_argument("--headless")  # Headless 모드
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
@@ -87,13 +130,19 @@ class DC_crawler:
         options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0")
         options.add_argument("--window-size=1420, 1080")
         options.add_argument('--blink-settings=imagesEnabled=false')    
-        options.binary_location = "/opt/chrome/chrome-linux64/chrome"
+        options.binary_location = "/opt/chrome/chrome-linux64/chrome" # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
         service = Service(executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver")
         
         driver = webdriver.Chrome(
             service=service, # 로컬 실행 시 주석 처리
             options=options) 
-        return driver
+        
+        if driver:
+            print("✅ Driver Successfully Set.")
+            return driver
+        else:
+            print("❌ Driver Setting Failed.")
+            return False
     
     def get_entry_point(self, driver:webdriver.Chrome, url):
         s_date = self.start_date
@@ -143,7 +192,7 @@ class DC_crawler:
         current_page_url = driver.current_url
         return current_page_url        
         
-    def crawl_post_link(self, driver:webdriver.Chrome, soup:BeautifulSoup, cur_date:str):
+    def crawl_post_link(self, soup:BeautifulSoup, cur_date:str):
         """
         현재 페이지에서 게시글들의 링크를 수집합니다.
         """
@@ -152,13 +201,19 @@ class DC_crawler:
         for post in posts:
             # 날짜 검증
             date = post.select_one("td.gall_date").get_text(strip=True) if post.select_one("td.gall_date") else "날짜 없음"
+            date = md_to_ymd(date)
+            
             if not is_date_in_range(date, self.start_date, self.end_date):
                 logger.info(f"❗️ Stopped by found date {date}")
+                print(f"❗️ Stopped by found date {date}")
                 return False
+            
+            date = convert_date_format(date)
             
             # 날짜 넘어갈 시 로그 작성
             if date != cur_date:
-                logger.info(f"Gathering Links of {date}")
+                logger.info(f"🔗 of {date}")
+                print(f"🔗 of {date}")
                 cur_date = date
               
             gall_num = int(post.select_one("td.gall_num").get_text(strip=True))
@@ -177,13 +232,13 @@ class DC_crawler:
     
     def page_traveler(self, driver:webdriver.Chrome, current_link:str):
         """
-        페이징 박스를 순회합니다.
-        시간 역순으로 순회합니다. 
+        페이징 박스를 순회합니다. <br>
+        시간 **역순**으로 순회합니다. <br>
         (페이징 박스는 정방향 순회, 보이는 게시글은 시간 역순)
         """
         # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
         cur_date = self.end_date
-        i = 0
+        # i = 0
         
         while True:
             driver.get(current_link)
@@ -191,7 +246,7 @@ class DC_crawler:
             soup = BeautifulSoup(driver.page_source, "html.parser")
             
             # is_crawl_post_success = False
-            date = self.crawl_post_link(driver, soup, cur_date)
+            date = self.crawl_post_link(soup, cur_date)
             
             if date: # 유효하지 않은 날짜를 만날 때 까지 크롤링
                 # 한 페이지를 다 긁었으면...
@@ -203,38 +258,40 @@ class DC_crawler:
                 # if next_link.get('class') == "search_next": 
                 #     logger.info("Search next 10000 posts")
                 
-                time.sleep(random.randrange(500, 1000) / 1000)
-                i += 1
+                time.sleep(random.randrange(50, 100) / 100)
+                # i += 1
             
                 cur_date = date    
                 
             else: # 특정 범위의 날짜를 전부 크롤링 했다면
                 logger.info(f"✅ crawling {self.start_date} ~ {self.end_date} finished")
+                print(f"✅ crawling {self.start_date} ~ {self.end_date} finished")
                 break
         return
     
-    def get_html_of_post(self, url:str):
+    def get_html_of_post(self, driver:webdriver.Chrome, url:str):
         """
         각 게시글의 html source를 가져옵니다.
         가져온 source를 반환합니다.
         """
-        headers = {'User-Agent': "Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)"}
+        # headers = {'User-Agent': "Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)"}
         for _ in range(self.MAX_TRY):
-            response = requests.get(url, headers=headers)
+            try:
+                driver.get(url)
+                time.sleep(WAIT_TIME - (random.randrange(50, 100) / 100))
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+                if soup:
+                    return soup
             
-            if response.status_code==200:
-                html_source = response.text
-                logger.info("Get link OK")
-                soup = BeautifulSoup(html_source, "html_parser")
-                return soup
-            
-            else:# 페이지 접근 재시도
+            except:# 페이지 접근 재시도
                 logger.error(f"❌ {url} request FAILED!")
+                print(f"❌ {url} request FAILED!")
                 time.sleep(self.RETRY_WAITS)
                 continue
         return False
             
     def html_parser(self, driver:webdriver.Chrome, post_info:dict, parsed_post:BeautifulSoup):
+        print("Now Parsing ▶ " , driver.current_url)
 
         def parse_main_content(target_element):
             """
@@ -248,7 +305,7 @@ class DC_crawler:
             content = write_div.get_text(separator="\n", strip=True)  # <br>을 \n으로 변환, 공백 제거
             return content, gaechu, bichu
 
-        def parse_comments(soup):
+        def parse_comments(soup:BeautifulSoup):
             """
             댓글 및 대댓글을 수집하여 리스트로 반환하는 함수.
             
@@ -267,43 +324,63 @@ class DC_crawler:
             for li in comment_ul.find_all("li", recursive=False):  # 최상위 li만 탐색 (대댓글 제외)
                 # 🔹 댓글인지 대댓글인지 구분
                 is_reply = 0  # 기본적으로 댓글(0)
-                if li.find("div", class_="reply_box"):
-                    is_reply = 1  # 대댓글(1)
+                
+                if "dory" in li.get("class", []): # 광고댓글 거르기 (댓글돌이 광고)
+                    continue                      
 
                 # 🔹 댓글 내용
-                content_tag = li.select_one("p.usertxt.ub-word")
-                content = content_tag.get_text(strip=True) if content_tag else ""
+                if (cmt_id := li.get('id')) and not li.select_one("p.del_reply"): # 댓글이면
+                    content_tag = li.select_one("p.usertxt.ub-word")
+                    content = content_tag.get_text(strip=True) if content_tag else ""
 
-                # 🔹 작성 시간 (datetime 변환)
-                date_tag = li.select_one("span.date_time")
-                created_at = datetime.strptime(date_tag.text, "%Y.%m.%d %H:%M:%S") if date_tag else None
+                    # 🔹 작성 시간 (datetime 변환)
+                    created_at = li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                    # isoformat으로 변환
+                    created_at = created_at.replace(" ", "T")
+                    # print(li.attrs["id"])
+                    
+                    comment_id = int(cmt_id.split('_')[-1])
+                    
+                    # 🔹 리스트에 추가
+                    comment_list.append({
+                        "comment_id": comment_id,
+                        "content": content,
+                        "is_reply": is_reply,
+                        "created_at": created_at,
+                        "upvote_count": 0,
+                        "downvote_count": 0
+                    })
+                else:
+                    comment_id = None
 
-                # 🔹 리스트에 추가
-                comment_list.append({
-                    "content": content,
-                    "is_reply": is_reply,
-                    "created_at": created_at
-                })
-
+                if li.find("div", class_="reply_box"):
+                    is_reply = 1  # 대댓글(1)
                 # 🔹 대댓글 탐색
                 reply_ul = li.select_one("ul.reply_list")
+                
                 if reply_ul:
+                    reply_parent_id = int(reply_ul.get('id').split('_')[-1])
                     for reply_li in reply_ul.find_all("li", class_="ub-content"):
-                        reply_content_tag = reply_li.select_one("p.usertxt.ub-word")
-                        reply_content = reply_content_tag.get_text(strip=True) if reply_content_tag else ""
+                        # reply_parent_id = comment_id
+                        if reply_content_tag := reply_li.select_one("p.usertxt.ub-word"):
+                            reply_content = reply_content_tag.get_text(strip=True) if reply_content_tag else ""
 
-                        reply_date_tag = reply_li.select_one("span.date_time")
-                        reply_created_at = datetime.strptime(reply_date_tag.text, "%Y.%m.%d %H:%M:%S") if reply_date_tag else None
+                            reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                            reply_created_at = reply_created_at.replace(" ", "T")
 
-                        comment_list.append({
-                            "content": reply_content,
-                            "is_reply": 1,  # 대댓글
-                            "created_at": reply_created_at
-                        })
+                            comment_list.append({
+                                "comment_id": reply_parent_id,
+                                "content": reply_content,
+                                "is_reply": 1,  # 대댓글
+                                "created_at": reply_created_at,
+                                "upvote_count": 0,
+                                "downvote_count": 0                            
+                            })
+                        else: continue
 
             return comment_list
 
-        def scrape_all_comment_pages(driver, soup):
+        def scrape_all_comment_pages(driver:webdriver.Chrome, soup:BeautifulSoup):
             """
             주어진 soup을 기반으로 댓글 페이지를 순회하며 모든 댓글을 수집하는 함수.
             """
@@ -321,7 +398,7 @@ class DC_crawler:
             paging_box = soup.select_one("div.cmt_paging")
             if not paging_box:
                 print("댓글 페이지네이션이 없음.")
-                return all_comments
+                return comments, all_comments
 
             next_page_btns = paging_box.find_all("a", href=True)
 
@@ -348,7 +425,7 @@ class DC_crawler:
         post_url = post_info['url']
         post_id = post_info['id']
         created_at = parsed_post.find("span", class_="gall_date")['title']
-        created_at = datetime.strptime(created_at, "%Y.%m.%d %H:%M:%S")
+        # created_at = datetime.strptime(created_at, "%Y.%m.%d %H:%M:%S")
         title = parsed_post.find("span", class_="title_subject").get_text(strip=True)
         view_count = int(parsed_post.find("span", class_="gall_count").get_text(strip=True)[len("조회 "):])
         content, up_vote, down_vote = parse_main_content(parsed_post)
@@ -368,34 +445,46 @@ class DC_crawler:
         }
                 
         return parsed_finally
-    
+  
+
     def save_json(self, parsed_json:json, post_info:dict):
-        file_path = f"extracted/{self.car_id}/{convert_date_format(post_info['date'])}/raw/dcinside/{post_info['id']}.json"
-        # directory = os.path.dirname(file_path)
+        # post_date = str(md_to_ymd(post_info['date']))
+        file_path = f"extracted/{self.car_id}/{post_info['date']}/raw/dcinside/{post_info['id']}.json"
+        directory = os.path.dirname(file_path)
 
         
         # if not os.path.exists(directory):  # 디렉토리가 존재하지 않으면
         #     os.makedirs(directory)  # 디렉토리 생성
-        
+        # 1. 폴더 존재 확인
+        try:
+            self.s3.head_object(Bucket=self.BUCKET_NAME, Key=directory)
+            print("✅ S3 folder route exists")
+        except:  # 폴더가 없는 경우
+            print(f"❌ S3 folder route doesn't exists. Making directory...{directory}")
+            
         try:
             # with open(file_path, "w", encoding="utf-8") as file:
                 # file.write(html_source)
             web_data = json.dumps(parsed_json, ensure_ascii=False, indent=4)
+            print(f"✅ Post ID: {post_info['id']} → File Created")
             
         except Exception as e:
-            print(f"❌ json dump 중 오류 발생: {e}")       
+            print(f"❌ json.dumps 중 오류 발생: {e}")       
             
         try:
-            self.s3.pub_object(
+            self.s3.put_object(
                 Bucket = self.BUCKET_NAME,
                 Key = file_path,
                 Body = web_data,
                 ContentType = "application/json"
             )     
-            logger.info(f"✅ Successfully uploaded {post_info['id']}.json to {self.BUCKET_NAME}")
+            logger.info(f"✅ Successfully uploaded {post_info['id']}.json to s3-bucket")
+            print(f"✅ Successfully uploaded {post_info['id']}.json to s3-bucket")
 
         except Exception as e:
             logger.error(f"❌ Error uploading file to S3: {e}", exc_info=True)
+            print(f"❌ Error uploading file to S3: {e}", exc_info=True)
+
         
     def run_crawl(self,):
         # 드라이버 세팅
@@ -404,43 +493,113 @@ class DC_crawler:
         
         # 검색 기간 내 가장 최신 게시글 검색 결과 접근
         end_point = self.get_entry_point(driver, url=self.search_url)
+        # if end_point:
+        #     aws_lambda_logging_ok("✅ Successfully accessed to init date")
+        # else:
+        #     aws_lambda_logging_fail("❌ Failed to access init date")
+            
         logger.info("✅ Successfully accessed to init date")
-        
+        print("✅ Successfully accessed to init date")
         # 접근 위치로부터 거슬러 올라가며 게시글 링크 수집
         self.page_traveler(driver, end_point)
+        print(f"✅ Gathering link completed : {len(self.post_link)} links")
         
         # 수집된 링크를 방문하며 html 소스 저장
         for i, post in enumerate(self.post_link):
             # print(f"Progressing... [{i+1} / {len(self.post_link)}]")
             
             # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
-            parsed_source = self.get_html_of_post(post['url'])
+            parsed_source = self.get_html_of_post(driver, post['url'])
             res_json = self.html_parser(driver, post, parsed_source)
             
             logger.info(f"Saving...[{i+1} / {len(self.post_link)}]")
+            print(f"Saving...[{i+1} / {len(self.post_link)}]")
             self.save_json(res_json, post)
                 
-            time.sleep(1 + random.randrange(500, 1000) / 1000)
-                    
+            time.sleep(random.randrange(50, 100) / 100)
+        
+        driver.close()
+        return True  
+                      
+def calculate_dates(a):
+    """
+    주어진 날짜 a를 기준으로 월을 변경하고, 45일 전후 날짜를 계산합니다.
 
+    Args:
+        a: "YYYY-MM-DD" 형식의 날짜 문자열
+
+    Returns:
+        딕셔너리: 
+            - (검색 종료일이 주어진 경우)
+                - month_minus_3: 월 -3인 날짜
+                - month_minus_3_minus_45: 월 -3인 날짜로부터 45일 전
+            
+            - (차량 출시일이 주어진 경우)
+                - month_plus_3: 월 +3인 날짜
+                - minus_45: a로부터 45일 전
+    """
+    year, month, day = map(int, a.split('-'))
+
+    # 월 변경 및 날짜 계산 함수
+    def change_month(y, m, d, delta):
+        new_month = (m + delta - 1) % 12 + 1  # 월 변경
+        new_year = y + (m + delta - 1) // 12  # 년도 변경
+        try:
+            return datetime(new_year, new_month, d).strftime("%Y-%m-%d")
+        except ValueError:  # 월의 마지막 날짜 처리
+            import calendar
+            last_day = calendar.monthrange(new_year, new_month)[1]
+            return datetime(new_year, new_month, last_day).strftime("%Y-%m-%d")
+
+    # 결과 계산
+    month_minus_3 = change_month(year, month, day, -3)
+    month_minus_3_minus_45 = (datetime.strptime(month_minus_3, "%Y-%m-%d") - timedelta(days=45)).strftime("%Y-%m-%d")
+    month_plus_3 = change_month(year, month, day, 3)
+    # month_plus_3_minus_45 = (datetime.strptime(month_plus_3, "%Y-%m-%d") - timedelta(days=45)).strftime("%Y-%m-%d")
+    minus_45 = (datetime.strptime(a, "%Y-%m-%d") - timedelta(days=45)).strftime("%Y-%m-%d")
+
+    return {
+        "month_minus_3": month_minus_3,
+        "month_minus_3_minus_45": month_minus_3_minus_45,
+        "month_plus_3": month_plus_3,
+        # "month_plus_3_minus_45": month_plus_3_minus_45,
+        "minus_45": minus_45
+    }
     
 def lambda_handler(event, context):
-    BUCKET_NAME = event.get('bucket_name')
-    car_keyword = event.get('car_keyword')
-    # car = {'산타페': [ # 차종
-    #             '산타페', # 해당 차종의 이명
-    #             '싼타페']
-    #     }   
-  
-    s_date="2023-08-16"
-    e_date="2023-11-16"
+    BUCKET_NAME = event.get('bucket')
+    car_id      = event.get('car_id') # santafe
+    car_keyword = event.get('keywords') # 싼타페
+    date        = event.get('date') # 2025-02-10
+    release_date = event.get('release_date')
+    test_date   = event.get('test_date')
+    
+    dates = calculate_dates(date)
+    
+    # 검색 구간의 끝 부분(현재와 가까운 쪽)이 주어질 경우
+    s_date = dates['month_minus_3_minus_45']
+    e_date = date
+    
+    if release_date:# 차량 출시일이 주어질 경우
+        s_date = dates['minus_45']
+        e_date = dates['month_plus_3']
+    
+    elif test_date:
+        s_date = test_date[0]
+        e_date = test_date[1]
+    
     
     logger.info(f"✅ Initiating Crawler : {s_date} ~ {e_date}")
-    
+    print(f"✅ Initiating Crawler : {s_date} ~ {e_date}")
     # car_keyword는 lambda_handler에서 event로 처리하게 할 것
-    crawler = DC_crawler(s_date, e_date, car_id="santafe", car_keyword=car_keyword, bucket_name=BUCKET_NAME)
+    crawler = DC_crawler(s_date, e_date, car_id=car_id, car_keyword=car_keyword, bucket_name=BUCKET_NAME)
     
+    print("Running crawler")
     logger.info("Running crawler")
-    crawler.run_crawl()
-    logger.info("✅ Crawling Finished")
+    if crawler.run_crawl():
+        logger.info("✅ Crawling Finished")
+        print("✅ Crawling Finished")
+    else:
+        logger.info("❌ Crawling Not Finished With Errors")
+        print("❌ Crawling Not Finished With Errors")
     

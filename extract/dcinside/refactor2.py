@@ -1,7 +1,6 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-# from webdriver_manager.chrome import ChromeDriverManager # chrome브라우저 버전에 맞는 드라이버인지 확인 및 없으면 다운로드
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -16,7 +15,6 @@ import boto3, random
 logging.basicConfig(level=logging.INFO)  # 로그 레벨 설정
 logger = logging.getLogger(__name__)
 
-# BUCKET_NAME = "hmg-5th-crawling-test"
 
 BASE_URL = "https://gall.dcinside.com/board/lists/?id=car_new1"
 WAIT_TIME = 2
@@ -173,9 +171,9 @@ class DC_crawler:
         시간 역순으로 순회합니다. 
         (페이징 박스는 정방향 순회, 보이는 게시글은 시간 역순)
         """
-        random_sleep_time = [0.8, 0.6, 0.7, 0.5]
+        # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
         cur_date = self.end_date
-        i = 0
+        # i = 0
         
         while True:
             driver.get(current_link)
@@ -197,7 +195,7 @@ class DC_crawler:
                 
                 # time.sleep(random_sleep_time[i := i % 4])
                 time.sleep(random.randrange(500, 1000) / 1000)
-                i += 1
+                # i += 1
             
                 cur_date = date    
                 
@@ -216,7 +214,7 @@ class DC_crawler:
             # response = requests.get(url, headers=headers)
             
             driver.get(url)
-            time.sleep(WAIT_TIME)
+            time.sleep(WAIT_TIME - (random.randrange(50, 100)/100))
             soup = BeautifulSoup(driver.page_source, "html.parser")            
             if soup:
                 return soup
@@ -272,6 +270,8 @@ class DC_crawler:
 
                     # 🔹 작성 시간 (datetime 변환)
                     created_at = li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                    # isoformat으로 변환
+                    created_at = created_at.replace(" ", "T")
                     # print(li.attrs["id"])
                     
                     comment_id = int(cmt_id.split('_')[-1])
@@ -301,7 +301,7 @@ class DC_crawler:
                             reply_content = reply_content_tag.get_text(strip=True) if reply_content_tag else ""
 
                             reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
-                            
+                            reply_created_at = reply_created_at.replace(" ", "T")
 
                             comment_list.append({
                                 "comment_id": reply_parent_id,
@@ -360,7 +360,7 @@ class DC_crawler:
         post_url = post_info['url']
         post_id = post_info['id']
         created_at = parsed_post.find("span", class_="gall_date")['title']
-        created_at.replace('-', '.')
+        # created_at.replace('-', '.') --> 아니 이게 살아있었는데ㅔ 어떻게 23-08-07 이런 식으로 저장된거지?
         # created_at = datetime.strptime(created_at, "%Y.%m.%d %H:%M:%S")
         title = parsed_post.find("span", class_="title_subject").get_text(strip=True)
         view_count = int(parsed_post.find("span", class_="gall_count").get_text(strip=True)[len("조회 "):])
@@ -434,13 +434,13 @@ if __name__=="__main__":
                 '싼타페']
         }   
   
-    s_date="2023-07-01"
-    e_date="2023-07-28"
+    s_date="2024-04-01"
+    e_date="2024-08-08"
     
     logger.info(f"✅ Initiating Crawler : {s_date} ~ {e_date}")
     
     # car_keyword는 lambda_handler에서 event로 처리하게 할 것
-    crawler = DC_crawler(s_date, e_date, car_id="santafe", car_keyword="싼타페")
+    crawler = DC_crawler(s_date, e_date, car_id="gv70", car_keyword="gv70")
     
     logger.info("Running crawler")
     crawler.run_crawl()
