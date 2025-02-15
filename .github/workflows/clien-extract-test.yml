@@ -61,7 +61,7 @@ jobs:
         LAMBDA_NAME=$(basename $TARGET_DIR)
         TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
         while [[ "$(aws lambda get-function-configuration --function-name "$TEST_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
-          echo "Lambda is still pending... waiting 5 seconds"
+          echo "Lambda is still pending... waiting 3 seconds"
           sleep 3
         done
         echo "Lambda is ready!"
