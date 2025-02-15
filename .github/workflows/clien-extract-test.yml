@@ -47,10 +47,12 @@ jobs:
           --package-type Image \
           --code ImageUri=$IMAGE_URI \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
+          --timeout 180 \
           --region ap-northeast-2 || \
         aws lambda update-function-code \
           --function-name $TEST_LAMBDA_NAME \
           --image-uri $IMAGE_URI \
+          --timeout 180 \
           --region ap-northeast-2
 
     - name: Invoke Test Lambda
