@@ -1,0 +1,83 @@
+name: Deploy Test Lambda For Clien
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - 'extract/clien/**'
+  workflow_dispatch:
+
+jobs:
+  deploy-test-lambda:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'extract/clien'
+    permissions:
+      id-token: write  # GitHub OIDC 사용을 위한 설정
+      contents: read
+
+    env:
+      TARGET_DIR: "extract/clien"
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
+
+    - name: Configure AWS Credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ap-northeast-2
+
+    - name: Login to Amazon ECR
+      run: |
+        aws ecr get-login-password --region ap-northeast-2 | \
+        docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_REGISTRY }}
+
+    - name: Build & Push Test Lambda Image
+      run: |
+        LAMBDA_NAME=$(basename $TARGET_DIR)
+        TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
+        IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME:latest"
+
+        echo "Building & Deploying Test Lambda: $TEST_LAMBDA_NAME"
+        docker build -t vroomcast/$TEST_LAMBDA_NAME $TARGET_DIR
+        docker tag vroomcast/$TEST_LAMBDA_NAME:latest $IMAGE_URI
+        docker push $IMAGE_URI
+
+        echo "Creating or Updating Test Lambda: $TEST_LAMBDA_NAME"
+        aws lambda create-function \
+          --function-name $TEST_LAMBDA_NAME \
+          --package-type Image \
+          --code ImageUri=$IMAGE_URI \
+          --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
+          --timeout 180 \
+          --region ap-northeast-2 || \
+        aws lambda update-function-code \
+          --function-name $TEST_LAMBDA_NAME \
+          --image-uri $IMAGE_URI \
+          --region ap-northeast-2
+
+    - name: Wait for Lambda to be Active
+      run: |
+        LAMBDA_NAME=$(basename $TARGET_DIR)
+        TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
+        while [[ "$(aws lambda get-function-configuration --function-name "$TEST_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
+          echo "Lambda is still pending... waiting 3 seconds"
+          sleep 3
+        done
+        echo "Lambda is ready!"
+
+    - name: Invoke Test Lambda
+      run: |
+        LAMBDA_NAME=$(basename $TARGET_DIR)
+        TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
+        echo "Invoking Test Lambda: $TEST_LAMBDA_NAME"
+        aws lambda invoke --function-name $TEST_LAMBDA_NAME \
+          --cli-binary-format raw-in-base64-out \
+          --payload '{ "car_id": "test-github", "keywords": ["캐스퍼"], "date": "2025-02-10", "bucket": "${{ secrets.AWS_TEST_BUCKET_NAME }}"}' \
+          response.json \
+          --region ap-northeast-2 
+        cat response.json
