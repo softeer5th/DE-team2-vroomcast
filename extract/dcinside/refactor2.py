@@ -75,7 +75,7 @@ class DC_crawler:
         # options.binary_location = chrome_path  # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
         options.add_argument("--headless")  # Headless 모드
         options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
+        # options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0")
         # options.add_argument("user-agent=Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)")
@@ -150,7 +150,7 @@ class DC_crawler:
             
             # 날짜 넘어갈 시 로그 작성
             if date != cur_date:
-                logger.info(f"Gathering Links of {date}")
+                logger.info(f"🔗 of {date}")
                 cur_date = date
               
             gall_num = int(post.select_one("td.gall_num").get_text(strip=True))
@@ -206,19 +206,20 @@ class DC_crawler:
                 break
         return
     
-    def get_html_of_post(self, url:str):
+    def get_html_of_post(self, driver, url:str):
         """
         각 게시글의 html source를 가져옵니다.
         가져온 source를 반환합니다.
         """
         headers = {'User-Agent': "Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)"}
         for _ in range(self.MAX_TRY):
-            response = requests.get(url, headers=headers)
+            # response = requests.get(url, headers=headers)
             
-            if response.status_code==200:
-                html_source = response.text
-                logger.info("Get link OK")
-                return html_source
+            driver.get(url)
+            time.sleep(WAIT_TIME)
+            soup = BeautifulSoup(driver.page_source, "html.parser")            
+            if soup:
+                return soup
             
             else:# 페이지 접근 재시도
                 logger.error(f"❌ {url} request FAILED!")
@@ -226,14 +227,165 @@ class DC_crawler:
                 continue
         return False
             
-    def save_html(self, html_source:str, post_info:dict):
+    def html_parser(self, driver:webdriver.Chrome, post_info:dict, parsed_post:BeautifulSoup):
+        print("Now Watching : " , driver.current_url)
+        def parse_main_content(target_element):
+            """
+            게시글 본문 크롤링
+            Returns:
+                본문 내용, 추천 수, 비추 수
+            """
+            write_div = target_element.find("div", class_="write_div")
+            gaechu = int(target_element.find("p", class_="up_num font_red").get_text(strip=True))
+            bichu = int(target_element.find("p", class_="down_num").get_text(strip=True))
+            content = write_div.get_text(separator="\n", strip=True)  # <br>을 \n으로 변환, 공백 제거
+            return content, gaechu, bichu
+
+        def parse_comments(soup:BeautifulSoup):
+            """
+            댓글 및 대댓글을 수집하여 리스트로 반환하는 함수.
+            
+            Args:
+                soup (BeautifulSoup): BeautifulSoup으로 파싱된 HTML
+            
+            Returns:
+                list[dict]: 댓글과 대댓글을 포함한 리스트
+            """
+            comment_list = []
+            comment_ul = soup.find("ul", class_="cmt_list")
+            
+            if not comment_ul:
+                # print("no comments")
+                return comment_list  # 댓글이 없으면 빈 리스트 반환
+            
+            for li in comment_ul.find_all("li", recursive=False):  # 최상위 li만 탐색 (대댓글 제외)
+                # 🔹 댓글인지 대댓글인지 구분
+                is_reply = 0  # 기본적으로 댓글(0)
+                
+                if "dory" in li.get("class", []): # 광고댓글 거르기 (댓글돌이 광고)
+                    continue
+                
+                # 🔹 댓글 내용
+                if (cmt_id := li.get('id')) and not li.select_one("p.del_reply"): # 댓글이면
+                    content_tag = li.select_one("p.usertxt.ub-word")
+                    content = content_tag.get_text(strip=True) if content_tag else ""
+
+                    # 🔹 작성 시간 (datetime 변환)
+                    created_at = li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                    # print(li.attrs["id"])
+                    
+                    comment_id = int(cmt_id.split('_')[-1])
+                    
+                    # 🔹 리스트에 추가
+                    comment_list.append({
+                        "comment_id": comment_id,
+                        "content": content,
+                        "is_reply": is_reply,
+                        "created_at": created_at,
+                        "upvote_count": 0,
+                        "downvote_count": 0
+                    })
+                else:
+                    comment_id = None
+                
+                if li.find("div", class_="reply_box"):
+                    is_reply = 1  # 대댓글(1)
+                # 🔹 대댓글 탐색
+                reply_ul = li.select_one("ul.reply_list")
+                
+                if reply_ul:
+                    reply_parent_id = int(reply_ul.get('id').split('_')[-1])
+                    for reply_li in reply_ul.find_all("li", class_="ub-content"):
+                        # reply_parent_id = comment_id
+                        if reply_content_tag := reply_li.select_one("p.usertxt.ub-word"):
+                            reply_content = reply_content_tag.get_text(strip=True) if reply_content_tag else ""
+
+                            reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                            
+
+                            comment_list.append({
+                                "comment_id": reply_parent_id,
+                                "content": reply_content,
+                                "is_reply": 1,  # 대댓글
+                                "created_at": reply_created_at,
+                                "upvote_count": 0,
+                                "downvote_count": 0                            
+                            })
+                        else: continue
+
+            return comment_list
+
+        def scrape_all_comment_pages(driver, soup):
+            """
+            주어진 soup을 기반으로 댓글 페이지를 순회하며 모든 댓글을 수집하는 함수.
+            """
+            comment_count_tag = soup.find('span', class_='gall_comment')
+            comment_count = int(comment_count_tag.find('a').text[len("댓글 "):]) if comment_count_tag else 0
+            
+            all_comments = []  # 모든 댓글을 저장할 리스트
+
+            # 🔹 첫 번째 페이지 댓글 수집
+            comments = parse_comments(soup)
+            all_comments.extend(comments)
+            
+
+            # 🔹 다음 댓글 페이지 버튼 찾기
+            paging_box = soup.select_one("div.cmt_paging")
+            if not paging_box:
+                # print("댓글 페이지네이션이 없음.")
+                return comment_count, all_comments
+
+            next_page_btns = paging_box.find_all("a", href=True)
+
+            for btn in next_page_btns:
+                page_number = btn.get_text(strip=True)
+                if page_number.isdigit():
+                    # print(f"이동 중: 댓글 페이지 {page_number}")
+
+                    # 🔹 JavaScript 실행하여 댓글 페이지 이동
+                    driver.execute_script(btn["href"])
+
+                    # 🔹 새로운 페이지 HTML을 가져오기 위해 대기
+                    WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "div.cmt_paging"))
+                    )
+
+                    # 🔹 새로운 soup 업데이트 후 댓글 추가 수집
+                    soup = BeautifulSoup(driver.page_source, "html.parser")
+                    comments = parse_comments(soup)
+                    all_comments.extend(comments)
+
+            return comment_count, all_comments
+
+        post_url = post_info['url']
+        post_id = post_info['id']
+        created_at = parsed_post.find("span", class_="gall_date")['title']
+        created_at.replace('-', '.')
+        # created_at = datetime.strptime(created_at, "%Y.%m.%d %H:%M:%S")
+        title = parsed_post.find("span", class_="title_subject").get_text(strip=True)
+        view_count = int(parsed_post.find("span", class_="gall_count").get_text(strip=True)[len("조회 "):])
+        content, up_vote, down_vote = parse_main_content(parsed_post)
+        comment_count, comment_list = scrape_all_comment_pages(driver, parsed_post)
+        
+        parsed_finally = {
+            "post_id" : post_id ,
+            "post_url" : post_url,
+            "title" : title,
+            "content" : content,
+            "created_at" : created_at,
+            "view_count" : view_count,
+            "upvote_count" : up_vote,
+            "downvote_count" : down_vote,
+            "comment_count" : comment_count,
+            "comments" : comment_list
+        }
+                
+        return parsed_finally
+    
+    def save_json(self, parsed_json:json, post_info:dict):
         file_path = f"extracted/{self.car_id}/{convert_date_format(post_info['date'])}/raw/dcinside/{post_info['id']}.json"
         directory = os.path.dirname(file_path)
-        
-        json_body = {
-            "url" : post_info['url'],
-            "html" : html_source
-        }
+
         
         if not os.path.exists(directory):  # 디렉토리가 존재하지 않으면
             os.makedirs(directory)  # 디렉토리 생성
@@ -241,12 +393,12 @@ class DC_crawler:
         try:
             with open(file_path, "w", encoding="utf-8") as file:
                 # file.write(html_source)
-                json.dump(json_body, file, ensure_ascii=False, indent=4)
+                json.dump(parsed_json, file, ensure_ascii=False, indent=4)
             # print(f"HTML 소스가 {file_path}에 저장되었습니다.")
             
         except Exception as e:
-            print(f"❌ 파일 저장 중 오류 발생: {e}")            
-            
+            logger.error(f"❌ 파일 저장 중 오류 발생: {e}")   
+        
     def run_crawl(self,):
         # 드라이버 세팅
         driver=self._get_driver()
@@ -261,15 +413,16 @@ class DC_crawler:
         
         # 수집된 링크를 방문하며 html 소스 저장
         for i, post in enumerate(self.post_link):
-            # print(f"Progressing...")
+            # print(post['url'])
+            # print(f"Progressing... [{i+1} / {len(self.post_link)}]")
             
             # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
-            html_source = self.get_html_of_post(post['url'])
+            parsed_source = self.get_html_of_post(driver, post['url'])
+            res_json = self.html_parser(driver, post, parsed_source)
             
-            logger.info(f"Saving... [{i+1} / {len(self.post_link)}]")
-            self.save_html(html_source, post)
+            logger.info(f"💿 ⏎ Saving...[{i+1} / {len(self.post_link)}]")
+            self.save_json(res_json, post)
                 
-            # time.sleep(random_sleep_time[i % 4])
             time.sleep(1 + random.randrange(500, 1000) / 1000)
                     
 
@@ -281,8 +434,8 @@ if __name__=="__main__":
                 '싼타페']
         }   
   
-    s_date="2023-08-16"
-    e_date="2023-11-16"
+    s_date="2023-07-01"
+    e_date="2023-07-28"
     
     logger.info(f"✅ Initiating Crawler : {s_date} ~ {e_date}")
     
@@ -291,5 +444,6 @@ if __name__=="__main__":
     
     logger.info("Running crawler")
     crawler.run_crawl()
+    
     logger.info("✅ Crawling Finished")
     

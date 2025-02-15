@@ -173,4 +173,7 @@ cython_debug/
 /chromedriver-win64
 /chrome*
 /.venv
+/extracted*
+/kia*
+/hyundai*
 .DS_Store
