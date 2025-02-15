@@ -6,52 +6,34 @@ on:
       - dev
 
 jobs:
-  detect-changes:
+  dispatch-tests:
     runs-on: ubuntu-latest
-    outputs:
-      changed_dirs: ${{ steps.detect.outputs.changed_dirs }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
-      - name: Fetch all branches
-        run: git fetch --prune
-
-      - name: Detect Changed Directories
-        id: detect
-        run: |
-          CHANGED_DIRS=$(git diff --name-only origin/dev ${{ github.sha }} | grep '^extract/' | cut -d '/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
-          echo "Changed directories: $CHANGED_DIRS"
-          echo "changed_dirs=$CHANGED_DIRS" >> $GITHUB_ENV
-
-  dispatch-tests:
-    needs: detect-changes
-    runs-on: ubuntu-latest
-    steps:
       - name: Trigger Extractor Tests
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const workflows = {
-              "clien": "clien-extract-test.yml",
-              "dcinside": "dcinside-extract-test.yml",
-              "bobaedream": "bobaedream-extract-test.yml"
+              "extract/clien": "clien-extract-test.yml",
+              "extract/dcinside": "dcinside-extract-test.yml",
+              "extract/bobaedream": "bobaedream-extract-test.yml"
             };
 
-            const changedDirs = JSON.parse('${{ toJson(env.changed_dirs) }}');
-            console.log("Changed directories:", changedDirs);
+            const sourceBranch = "${{ github.event.pull_request.head.ref }}";  // ✅ PR 출발 브랜치 확인
+            console.log("PR is coming from:", sourceBranch);
 
-            for (const dir of JSON.parse(changedDirs)) {
-              if (workflows[dir]) {
-                console.log(`Triggering workflow: ${workflows[dir]}`);
-                await github.rest.actions.createWorkflowDispatch({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  workflow_id: workflows[dir],
-                  ref: "dev"
-                });
-              }
+            if (workflows[sourceBranch]) {
+              console.log(`Triggering workflow: ${workflows[sourceBranch]}`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflows[sourceBranch],
+                ref: "dev"
+              });
+            } else {
+              console.log("No matching workflow found for this branch.");
             }
