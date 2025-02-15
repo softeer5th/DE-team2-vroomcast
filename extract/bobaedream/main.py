@@ -55,7 +55,7 @@ def lambda_handler(event, context):
             raise ValueError("bucket, car_id, keywords, and date are required")
 
         for keyword in keywords:
-            _extract(car_id, keyword, date, bucket)
+            _extract(bucket, car_id, keyword, date)
 
         end_time = datetime.now()
         duration = end_time - start_time
