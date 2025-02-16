@@ -37,26 +37,52 @@ def aws_lambda_logging_fail(log_text):
     
 def convert_date_format(date_str):
     # date_str = str(md_to_ymd(date_str))
-    return str(date_str).split(' ')[0][2:]
+    return str(date_str).split(' ')[0].replace('.', '-')
 
 def md_to_ymd(date_str:str):
-    try:
-        date = datetime.strptime(date_str, '%y.%m.%d')
-        return date
-    except :
-        try:
-            date_str = datetime.strptime(date_str, "%m.%d")
-            current_year = datetime.now().year
-            date = date_str.replace(year=current_year)
-            return date
-        except ValueError:
-            print("Invalid date format")
-            return False
+    """
+    두 가지 날짜 형식을 입력받아 "yyyy.mm.dd HH:MM:SS" 형식으로 변환합니다.
+    본문 및 댓글의 날짜 형식에 대응합니다.
+    
+    Args:
+        date_str: 변환할 날짜 문자열 ("yyyy.mm.dd HH:MM:SS" 또는 "mm.dd HH:MM:SS" 형식)
 
-def is_date_in_range(date:datetime, start_date_str, end_date_str):
+    Returns:
+        "yyyy.mm.dd HH:MM:SS" 형식으로 변환된 날짜 문자열
+    """
+    try:
+        # "yyyy.mm.dd HH:MM:SS" 형식인 경우 그대로 반환
+        datetime.strptime(date_str, "%Y.%m.%d %H:%M:%S")
+        return date_str
+    except ValueError:
+        try:
+            # "mm.dd HH:MM:SS" 형식인 경우 연도를 2025로 가정하여 변환
+            date_obj = datetime.strptime(date_str, "%m.%d %H:%M:%S")
+            return date_obj.replace(year=datetime.now().year).strftime("%Y.%m.%d %H:%M:%S")
+        except ValueError:
+            return "Invalid date format"
+
+def date_type_for_search_result(date_str):
+    try:
+        # 'mm.dd' 형식 처리
+        date_obj = datetime.strptime(date_str, "%m.%d")
+        date_obj = date_obj.replace(year=datetime.now().year)
+        # print(date_obj)
+        return date_obj
+    except ValueError:
+        try:
+            # 'yy.mm.dd' 형식 처리
+            date_obj = datetime.strptime(date_str, "%y.%m.%d")
+            # print(date_obj)
+            return(date_obj)
+        except ValueError:
+            return "Invalid Date Format"
+
+def is_date_in_range(date, start_date_str, end_date_str):
     """
     주어진 날짜 문자열이 특정 날짜 범위 안에 있는지 확인합니다 (dateutil 사용).
-
+    검색 결과 목록의 날짜 형식에 대응합니다.
+    
     Args:
         date_str: 검사할 날짜 문자열 (예: '23.08.17' | '02.15')
         start_date_str: 시작 날짜 문자열 (예: '2023-08-16')
@@ -65,37 +91,16 @@ def is_date_in_range(date:datetime, start_date_str, end_date_str):
     Returns:
         bool: 날짜가 범위 안에 있으면 True, 아니면 False
     """
-    
-    start_date = parser.parse(start_date_str)
-    end_date = parser.parse(end_date_str)    
-    return start_date <= date <= end_date
 
-    # try:
-    #     # '%y.%m.%d' type
-    #     date = datetime.strptime(date_str, '%y.%m.%d')
-    #     start_date = parser.parse(start_date_str)
-    #     end_date = parser.parse(end_date_str)
 
-    #     # 날짜 범위 안에 있는지 확인
-    #     return start_date <= date <= end_date
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
 
-    # except ValueError:
-    #     try: # '%m.%d' type -> 올해 작성된 글은 년도 표기가 빠져있다.
-    #         datetime.strptime(date_str, "%m.%d")
-    #         current_year = datetime.now().year % 100
-    #         date_str = f"{current_year:02d}.{date_str}" #'%y.%m.%d' type으로 변환
-            
-    #         date = datetime.strptime(date_str, '%y.%m.%d')
-    #         start_date = parser.parse(start_date_str)
-    #         end_date = parser.parse(end_date_str)
+        return start_date <= date <= end_date
 
-    #         # 날짜 범위 안에 있는지 확인
-    #         return start_date <= date <= end_date
-        
-    #     except ValueError:
-    #         print("Invalid date format")
-    #         # logger.error("Error occured while parsing date")
-    #         return False  # 날짜 형식이 잘못된 경우 False 반환
+    except ValueError:
+        return "Invalid Date Format"
     
     
 class DC_crawler:
@@ -201,14 +206,14 @@ class DC_crawler:
         for post in posts:
             # 날짜 검증
             date = post.select_one("td.gall_date").get_text(strip=True) if post.select_one("td.gall_date") else "날짜 없음"
-            date = md_to_ymd(date)
+            date = date_type_for_search_result(date)
             
             if not is_date_in_range(date, self.start_date, self.end_date):
-                logger.info(f"❗️ Stopped by found date {date}")
-                print(f"❗️ Stopped by found date {date}")
+                logger.info(f"❗️ Stopped by found date {str(date).split()[0]}")
+                print(f"❗️ Stopped by found date {str(date).split()[0]}")
                 return False
             
-            date = convert_date_format(date)
+            date = str(date).split()[0]
             
             # 날짜 넘어갈 시 로그 작성
             if date != cur_date:
@@ -334,9 +339,10 @@ class DC_crawler:
                     content = content_tag.get_text(strip=True) if content_tag else ""
 
                     # 🔹 작성 시간 (datetime 변환)
-                    created_at = li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                    created_at = li.select_one("span.date_time").get_text(strip=True) 
                     # isoformat으로 변환
-                    created_at = created_at.replace(" ", "T")
+                    ymd, hms = md_to_ymd(created_at).split()
+                    created_at = 'T'.join([convert_date_format(ymd), hms])
                     # print(li.attrs["id"])
                     
                     comment_id = int(cmt_id.split('_')[-1])
@@ -365,8 +371,9 @@ class DC_crawler:
                         if reply_content_tag := reply_li.select_one("p.usertxt.ub-word"):
                             reply_content = reply_content_tag.get_text(strip=True) if reply_content_tag else ""
 
-                            reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
-                            reply_created_at = reply_created_at.replace(" ", "T")
+                            reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True) 
+                            ymd, hms = md_to_ymd(reply_created_at).split()
+                            reply_created_at = 'T'.join([convert_date_format(ymd), hms])
 
                             comment_list.append({
                                 "comment_id": reply_parent_id,
@@ -397,7 +404,7 @@ class DC_crawler:
             # 🔹 다음 댓글 페이지 버튼 찾기
             paging_box = soup.select_one("div.cmt_paging")
             if not paging_box:
-                print("댓글 페이지네이션이 없음.")
+                # print("댓글 페이지네이션이 없음.")
                 return comments, all_comments
 
             next_page_btns = paging_box.find_all("a", href=True)
@@ -424,8 +431,11 @@ class DC_crawler:
 
         post_url = post_info['url']
         post_id = post_info['id']
-        created_at = parsed_post.find("span", class_="gall_date")['title']
-        # created_at = datetime.strptime(created_at, "%Y.%m.%d %H:%M:%S")
+        
+        created_at = parsed_post.find("span", class_="gall_date").get_text(strip=True)
+        ymd, hms = created_at.split()
+        created_at = 'T'.join([convert_date_format(ymd), hms])
+        
         title = parsed_post.find("span", class_="title_subject").get_text(strip=True)
         view_count = int(parsed_post.find("span", class_="gall_count").get_text(strip=True)[len("조회 "):])
         content, up_vote, down_vote = parse_main_content(parsed_post)
@@ -448,8 +458,9 @@ class DC_crawler:
   
 
     def save_json(self, parsed_json:json, post_info:dict):
+        file_date = post_info['date'][5:]
         # post_date = str(md_to_ymd(post_info['date']))
-        file_path = f"extracted/{self.car_id}/{post_info['date']}/raw/dcinside/{post_info['id']}.json"
+        file_path = f"extracted/{self.car_id}/{file_date}/raw/dcinside/{post_info['id']}.json"
         directory = os.path.dirname(file_path)
 
         

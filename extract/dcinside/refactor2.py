@@ -23,33 +23,71 @@ SEARCH_URL_TITLE = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=s
 SEARCH_URL_TITLE_AND_CONTENT = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=search_subject_memo&s_keyword="  
 
 def convert_date_format(date_str):
-    """YY.MM.DD 형식을 YY-MM-DD 형식으로 변환합니다."""
-    year, month, day = date_str.split('.')
-    return f"{year}-{month}-{day}"
+    # date_str = str(md_to_ymd(date_str))
+    return str(date_str).split(' ')[0].replace('.', '-')
 
-def is_date_in_range(date_str, start_date_str, end_date_str):
+def md_to_ymd(date_str:str):
+    """
+    두 가지 날짜 형식을 입력받아 "yyyy.mm.dd HH:MM:SS" 형식으로 변환합니다.
+    본문 및 댓글의 날짜 형식에 대응합니다.
+    
+    Args:
+        date_str: 변환할 날짜 문자열 ("yyyy.mm.dd HH:MM:SS" 또는 "mm.dd HH:MM:SS" 형식)
+
+    Returns:
+        "yyyy.mm.dd HH:MM:SS" 형식으로 변환된 날짜 문자열
+    """
+    try:
+        # "yyyy.mm.dd HH:MM:SS" 형식인 경우 그대로 반환
+        datetime.strptime(date_str, "%Y.%m.%d %H:%M:%S")
+        return date_str
+    except ValueError:
+        try:
+            # "mm.dd HH:MM:SS" 형식인 경우 연도를 2025로 가정하여 변환
+            date_obj = datetime.strptime(date_str, "%m.%d %H:%M:%S")
+            return date_obj.replace(year=datetime.now().year).strftime("%Y.%m.%d %H:%M:%S")
+        except ValueError:
+            return "Invalid date format"
+
+def date_type_for_search_result(date_str):
+    try:
+        # 'mm.dd' 형식 처리
+        date_obj = datetime.strptime(date_str, "%m.%d")
+        date_obj = date_obj.replace(year=datetime.now().year)
+        # print(date_obj)
+        return date_obj
+    except ValueError:
+        try:
+            # 'yy.mm.dd' 형식 처리
+            date_obj = datetime.strptime(date_str, "%y.%m.%d")
+            # print(date_obj)
+            return(date_obj)
+        except ValueError:
+            return "Invalid Date Format"
+
+def is_date_in_range(date, start_date_str, end_date_str):
     """
     주어진 날짜 문자열이 특정 날짜 범위 안에 있는지 확인합니다 (dateutil 사용).
-
+    검색 결과 목록의 날짜 형식에 대응합니다.
+    
     Args:
-        date_str: 검사할 날짜 문자열 (예: '23.08.17')
+        date_str: 검사할 날짜 문자열 (예: '23.08.17' | '02.15')
         start_date_str: 시작 날짜 문자열 (예: '2023-08-16')
         end_date_str: 종료 날짜 문자열 (예: '2023-11-16')
 
     Returns:
         bool: 날짜가 범위 안에 있으면 True, 아니면 False
     """
-    try:
-        # dateutil을 사용하여 날짜 문자열을 datetime 객체로 변환
-        date = datetime.strptime(date_str, '%y.%m.%d')
-        start_date = parser.parse(start_date_str)
-        end_date = parser.parse(end_date_str)
 
-        # 날짜 범위 안에 있는지 확인
+
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+
         return start_date <= date <= end_date
+
     except ValueError:
-        # logger.error("Error occured while parsing date")
-        return False  # 날짜 형식이 잘못된 경우 False 반환
+        return "Invalid Date Format"
     
 class DC_crawler:
     MAX_TRY = 2
@@ -142,9 +180,13 @@ class DC_crawler:
         for post in posts:
             # 날짜 검증
             date = post.select_one("td.gall_date").get_text(strip=True) if post.select_one("td.gall_date") else "날짜 없음"
+            date = date_type_for_search_result(date)
+            
             if not is_date_in_range(date, self.start_date, self.end_date):
-                logger.info(f"❗️ Stopped by found date {date}")
+                logger.info(f"❗️ Stopped by found date {str(date).split()[0]}")
                 return False
+            
+            date = str(date).split()[0]
             
             # 날짜 넘어갈 시 로그 작성
             if date != cur_date:
@@ -269,10 +311,10 @@ class DC_crawler:
                     content = content_tag.get_text(strip=True) if content_tag else ""
 
                     # 🔹 작성 시간 (datetime 변환)
-                    created_at = li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
+                    created_at = li.select_one("span.date_time").get_text(strip=True)
                     # isoformat으로 변환
-                    created_at = created_at.replace(" ", "T")
-                    # print(li.attrs["id"])
+                    ymd, hms = md_to_ymd(created_at).split()
+                    created_at = 'T'.join([convert_date_format(ymd), hms])
                     
                     comment_id = int(cmt_id.split('_')[-1])
                     
@@ -300,8 +342,9 @@ class DC_crawler:
                         if reply_content_tag := reply_li.select_one("p.usertxt.ub-word"):
                             reply_content = reply_content_tag.get_text(strip=True) if reply_content_tag else ""
 
-                            reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True).replace('.', '-')
-                            reply_created_at = reply_created_at.replace(" ", "T")
+                            reply_created_at = reply_li.select_one("span.date_time").get_text(strip=True)
+                            ymd, hms = md_to_ymd(reply_created_at).split()
+                            reply_created_at = 'T'.join([convert_date_format(ymd), hms])
 
                             comment_list.append({
                                 "comment_id": reply_parent_id,
@@ -359,7 +402,10 @@ class DC_crawler:
 
         post_url = post_info['url']
         post_id = post_info['id']
-        created_at = parsed_post.find("span", class_="gall_date")['title']
+        # type : yyyy.mm.dd HH:MM:SS
+        created_at = parsed_post.find("span", class_="gall_date").get_text(strip=True)
+        ymd, hms = created_at.split()
+        created_at = 'T'.join([convert_date_format(ymd), hms])
         # created_at.replace('-', '.') --> 아니 이게 살아있었는데ㅔ 어떻게 23-08-07 이런 식으로 저장된거지?
         # created_at = datetime.strptime(created_at, "%Y.%m.%d %H:%M:%S")
         title = parsed_post.find("span", class_="title_subject").get_text(strip=True)
@@ -383,7 +429,8 @@ class DC_crawler:
         return parsed_finally
     
     def save_json(self, parsed_json:json, post_info:dict):
-        file_path = f"extracted/{self.car_id}/{convert_date_format(post_info['date'])}/raw/dcinside/{post_info['id']}.json"
+        file_date = post_info['date'][5:]
+        file_path = f"extracted/{self.car_id}/{file_date}/raw/dcinside/{post_info['id']}.json"
         directory = os.path.dirname(file_path)
 
         
@@ -423,7 +470,7 @@ class DC_crawler:
             logger.info(f"💿 ⏎ Saving...[{i+1} / {len(self.post_link)}]")
             self.save_json(res_json, post)
                 
-            time.sleep(1 + random.randrange(500, 1000) / 1000)
+            time.sleep(1 + random.randrange(50, 100) / 100)
                     
 
     
@@ -434,13 +481,13 @@ if __name__=="__main__":
                 '싼타페']
         }   
   
-    s_date="2024-04-01"
-    e_date="2024-08-08"
+    s_date="2024-12-30"
+    e_date="2025-01-02"
     
     logger.info(f"✅ Initiating Crawler : {s_date} ~ {e_date}")
     
     # car_keyword는 lambda_handler에서 event로 처리하게 할 것
-    crawler = DC_crawler(s_date, e_date, car_id="gv70", car_keyword="gv70")
+    crawler = DC_crawler(s_date, e_date, car_id="casper", car_keyword="캐스퍼")
     
     logger.info("Running crawler")
     crawler.run_crawl()
