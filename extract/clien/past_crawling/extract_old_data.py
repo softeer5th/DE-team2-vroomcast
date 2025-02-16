@@ -11,7 +11,7 @@ from parse_html import get_post_dict
 
 # 상수 정의
 BASE_URL = "https://www.clien.net"
-SEARCH_URL = "/service/board/cm_car?&od=T31&category=0&po={}"
+SEARCH_URL = "/service/board/cm_car?&od=T31&category=0{}"
 SLEEP_SECONDS = (1, 3)
 TRIAL_LIMIT = 10
 
@@ -155,7 +155,7 @@ def main_crawler(keywords: list, date: str, s3, car_id, bucket, months: int = 1,
 
     while True:
         # URL 생성
-        search_url = BASE_URL + SEARCH_URL.format(page_number)
+        search_url = BASE_URL + SEARCH_URL.format(f"&po={page_number}" if page_number else "")
         logging.info(f"Fetching URL: {search_url}")
 
         # HTML 콘텐츠 요청

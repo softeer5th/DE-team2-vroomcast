@@ -11,7 +11,7 @@ from parse_html import get_post_dict
 
 # 상수 정의
 BASE_URL = "https://www.clien.net"
-SEARCH_URL = "/service/search?q={}&sort=recency&p={}&boardCd=cm_car&isBoard=true"
+SEARCH_URL = "/service/search?q={}&sort=recency&{}boardCd=cm_car&isBoard=true"
 BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
 TRIAL_LIMIT = 10
@@ -71,7 +71,7 @@ def main_crawler(keyword: str, date: str) -> dict:
 
     while page_number < 50:
         # URL 생성 및 요청
-        search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, page_number)
+        search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
         logging.info(f"Fetching URL: {search_url}")
         html_content = fetch_html(search_url)
         if not html_content:
@@ -168,7 +168,7 @@ if __name__ == "__main__":
       "keywords": [
         "아이오닉"
       ],
-      "date": "2025-02-12",
+      "date": "2025-02-09",
       "bucket": "hmg-5th-crawling-test"
     }
     lambda_handler(event_json, "")
