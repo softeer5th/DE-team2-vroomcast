@@ -46,6 +46,23 @@ jobs:
         docker tag vroomcast/$DEPLOY_IMAGE_NAME:latest $IMAGE_URI
         docker push $IMAGE_URI
 
+        echo "Check latest image has same digest with expected one"
+        LOCAL_DIGEST = $(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_URI | cut -d '@' -f 2)
+        for i in {1..10}; do
+          ECR_DIGEST=$(aws ecr batch-get-image --repository-name vroomcast/$DEPLOY_IMAGE_NAME --image-ids imageTag=latest --query 'images[0].imageId.imageDigest' --output text)
+          if [ "$ECR_DIGEST" == "$LOCAL_DIGEST" ]; then
+            echo "Image successfully pushed and verified in ECR!"
+            break
+          fi
+          echo "ECR image not updated yet. Retrying in 3 seconds..."
+          sleep 3
+        done
+        
+        if [ "$ECR_DIGEST" != "$LOCAL_DIGEST" ]; then
+          echo "ECR image digest does not match local digest! Exiting..."
+          exit 1
+        fi
+
         echo "Creating or Updating Deploy Lambda: $DEPLOY_LAMBDA_NAME"
         aws lambda create-function \
           --function-name $DEPLOY_LAMBDA_NAME \
