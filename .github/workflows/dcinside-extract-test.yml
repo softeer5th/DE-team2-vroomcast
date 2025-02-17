@@ -63,17 +63,19 @@ jobs:
           exit 1
         fi
         
+        IMAGE_URI_WITH_DIGEST="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME@${LOCAL_DIGEST}"
+    
         echo "Creating or Updating Test Lambda: $TEST_LAMBDA_NAME"
         aws lambda create-function \
           --function-name $TEST_LAMBDA_NAME \
           --package-type Image \
-          --code ImageUri=$IMAGE_URI \
+          --code ImageUri=$IMAGE_URI_WITH_DIGEST \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
           --timeout 180 \
           --region ap-northeast-2 || \
         aws lambda update-function-code \
           --function-name $TEST_LAMBDA_NAME \
-          --image-uri $IMAGE_URI \
+          --image-uri $IMAGE_URI_WITH_DIGEST \
           --region ap-northeast-2
 
     - name: Wait for Lambda to be Active
