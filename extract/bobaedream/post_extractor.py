@@ -172,10 +172,14 @@ def _parse_comments(soup: BeautifulSoup) -> list[dict[str, str | int]]:
     return comments
 
 
-def _parse_post(soup: BeautifulSoup, url: str, id: str) -> dict[str, str | int]:
+def _parse_post(soup: BeautifulSoup, url: str, id: str, start_datetime: str, end_datetime: str) -> dict[str, str | int] | None:
+    created_at = _parse_post_created_at(soup)
+
+    if created_at < start_datetime or created_at > end_datetime:
+        return None
+
     title = _parse_post_title(soup)
     content = _parse_post_content(soup)
-    created_at = _parse_post_created_at(soup)
     view_count = _parse_post_view_count(soup)
     upvote_count = _parse_post_upvote_count(soup)
     downvote_count = None
@@ -196,7 +200,7 @@ def _parse_post(soup: BeautifulSoup, url: str, id: str) -> dict[str, str | int]:
     }
 
 
-def extract_post(url: str, id: str) -> dict[str, str | int]:
+def extract_post(url: str, id: str, start_datetime: str, end_datetime: str) -> dict[str, str | int]:
     html = _fetch_post(url)
     soup = _get_soup(html)
-    return _parse_post(soup, url, id)
+    return _parse_post(soup, url, id, start_datetime, end_datetime)

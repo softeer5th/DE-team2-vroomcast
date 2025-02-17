@@ -148,8 +148,11 @@ def _parse_post_infos_per_page(
     return post_infos
 
 
-def get_post_infos(keyword: str, start_date: str, end_date: str) -> list[dict]:
+def get_post_infos(keyword: str, start_datetime: str, end_datetime: str) -> list[dict]:
     post_infos = []
+
+    start_date = start_datetime.split("T")[0]
+    end_date = end_datetime.split("T")[0]
 
     start_page = _find_start_page(keyword, start_date, end_date)
 

@@ -12,7 +12,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 COMMUNITY = "bobaedream"
-SAVE_PATH = "extracted/{car_id}/{date}/raw/{community}/{post_id}.json"
+SAVE_PATH = "extracted/{car_id}/{date}/{batch}/raw/{community}/{post_id}.json"
 
 
 def _save_to_s3(post: dict, bucket: str, key: str):
@@ -30,13 +30,15 @@ def _save_to_s3(post: dict, bucket: str, key: str):
         raise
 
 
-def _extract(bucket: str, car_id: str, keyword: str, date: str) -> None:
-    post_infos = get_post_infos(keyword, date, date)
+def _extract(bucket: str, car_id: str, keyword: str, date: str, batch: int, start_datetime: str, end_datetime: str) -> None:
+    post_infos = get_post_infos(keyword, start_datetime, end_datetime)
 
     for post_info in post_infos:
-        post = extract_post(post_info["url"], str(post_info["id"]))
+        post = extract_post(post_info["url"], str(post_info["id"]), start_datetime, end_datetime)
+        if not post:
+            continue
         s3_key = SAVE_PATH.format(
-            car_id=car_id, date=date, community=COMMUNITY, post_id=post_info["id"]
+            car_id=car_id, date=date, batch=batch, community=COMMUNITY, post_id=post_info["id"]
         )
         _save_to_s3(post, bucket, s3_key)
         logger.info(f"Saved to S3: {s3_key}")
@@ -50,12 +52,15 @@ def lambda_handler(event, context):
         car_id = event.get("car_id")
         keywords = event.get("keywords")
         date = event.get("date")
+        batch = event.get("batch")
+        start_datetime = event.get("start_datetime")
+        end_datetime = event.get("end_datetime")
 
-        if not all([bucket, car_id, keywords, date]):
-            raise ValueError("bucket, car_id, keywords, and date are required")
+        if not all([bucket, car_id, keywords, date, batch, start_datetime, end_datetime]):
+            raise ValueError("Missing required fields")
 
         for keyword in keywords:
-            _extract(bucket, car_id, keyword, date)
+            _extract(bucket, car_id, keyword, date, batch, start_datetime, end_datetime)
 
         end_time = datetime.now()
         duration = end_time - start_time
@@ -68,6 +73,9 @@ def lambda_handler(event, context):
                 "duration": str(duration),
                 "car_id": car_id,
                 "date": date,
+                "batch": batch,
+                "start_datetime": start_datetime,
+                "end_datetime": end_datetime,
             },
         }
     except Exception as e:
@@ -83,5 +91,8 @@ def lambda_handler(event, context):
                 "duration": str(duration),
                 "car_id": car_id if car_id else None,
                 "date": date,
+                "batch": batch,
+                "start_datetime": start_datetime,
+                "end_datetime": end_datetime,
             },
         }

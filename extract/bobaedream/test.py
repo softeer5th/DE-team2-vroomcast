@@ -1,4 +1,5 @@
 import json
+import os
 
 from post_extractor import (
     _get_soup,
@@ -39,10 +40,10 @@ def test_post_extractor():
 # pytest -v -s test.py::test_get_post_infos
 def test_get_post_infos():
     keyword = "아반떼"
-    start_date = "2023-06-01"
-    end_date = "2023-07-01"
+    start_datetime = "2023-06-01T12:00:00"
+    end_datetime = "2023-07-01T12:00:00"
 
-    post_infos = get_post_infos(keyword, start_date, end_date)
+    post_infos = get_post_infos(keyword, start_datetime, end_datetime)
 
     print("=== 검색 결과 테스트 ===")
     print("Post 개수:", len(post_infos))
@@ -82,13 +83,18 @@ def test_extract_post():
 # pytest -v -s test.py::test
 def test():
     keyword = "아반떼"
-    start_date = "2023-07-01"
-    end_date = "2023-07-01"
+    start_datetime = "2025-02-15T12:00:00"
+    end_datetime = "2025-02-17T15:15:00"
 
-    post_infos = get_post_infos(keyword, start_date, end_date)
+    post_infos = get_post_infos(keyword, start_datetime, end_datetime)
+
+    os.makedirs("sample", exist_ok=True)
 
     for post_info in post_infos:
-        post = extract_post(post_info["url"], str(post_info["id"]))
+        post = extract_post(post_info["url"], str(post_info["id"]), start_datetime, end_datetime)
+        if not post:
+            continue
+        print(f"Post ID and Date {post['post_id']}, {post['created_at']}")
         with open(f"sample/{post_info['id']}.json", "w", encoding="utf-8") as f:
             json.dump(post, f, ensure_ascii=False, indent=2)
 
