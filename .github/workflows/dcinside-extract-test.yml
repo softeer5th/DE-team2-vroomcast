@@ -93,7 +93,7 @@ jobs:
         echo "Invoking Test Lambda: $TEST_LAMBDA_NAME"
         aws lambda invoke --function-name $TEST_LAMBDA_NAME \
           --cli-binary-format raw-in-base64-out \
-          --payload '{ "car_id": "test-github", "keywords": ["캐스퍼"], "date": "2025-02-10", "bucket": "${{ secrets.AWS_TEST_BUCKET_NAME }}"}' \
+          --payload '{ "car_id": "test-github", "keywords": ["캐스퍼"], "start_datetime": "2025-02-10T09:00:00", "end_datetime": "2025-02-10T12:00:00", "bucket": "${{ secrets.AWS_TEST_BUCKET_NAME }}"}' \
           response.json \
           --region ap-northeast-2 
         cat response.json
