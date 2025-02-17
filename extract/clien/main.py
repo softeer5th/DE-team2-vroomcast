@@ -38,7 +38,7 @@ def fetch_html(url: str) -> str:
     return ""
 
 
-def parse_rows(rows, target_date: datetime.date) -> dict:
+def parse_rows(rows, start_datetime, end_datetime) -> dict:
     """HTML row 데이터를 파싱하고 필터링하여 URL 딕셔너리를 반환합니다."""
     urls = {}
     for row in rows:
@@ -46,18 +46,17 @@ def parse_rows(rows, target_date: datetime.date) -> dict:
         content_url = row.select_one('a.subject_fixed')
         content_url_postfix = content_url['href'].split('?')[0]
         content_id = content_url_postfix.split('/')[-1]
-        content_board = content_url_postfix.split('/')[-2]
-        content_date = datetime.strptime(content_time.text, "%Y-%m-%d %H:%M:%S").date()
+        content_datetime = datetime.strptime(content_time.text, "%Y-%m-%d %H:%M:%S")
 
         # 게시판 필터와 날짜 기준으로 필터링
-        if content_board != BOARD_FILTER or content_date != target_date:
+        if start_datetime > content_datetime or end_datetime < content_datetime:
             continue
         full_url = BASE_URL + content_url_postfix
         urls[content_id] = full_url
     return urls
 
 
-def main_crawler(keyword: str, date: str) -> dict:
+def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
     """
     지정된 키워드와 날짜 기준으로 게시글 URL을 크롤링합니다.
     :param keyword: 검색 키워드
@@ -65,7 +64,8 @@ def main_crawler(keyword: str, date: str) -> dict:
     :return: 게시글 URL 딕셔너리
     """
     encoded_keyword = urllib.parse.quote(keyword)
-    target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    start_datetime = datetime.strptime(start_datetime, "%Y-%m-%dT%H:%M:%S")
+    end_datetime = datetime.strptime(end_datetime, "%Y-%m-%dT%H:%M:%S")
     page_number = 0
     urls = {}
 
@@ -81,13 +81,13 @@ def main_crawler(keyword: str, date: str) -> dict:
         soup = BeautifulSoup(html_content, "html.parser")
         rows = soup.select("div.list_item.symph_row.jirum")
         logging.info(f"Parsing {len(rows)} rows.")
-        urls.update(parse_rows(rows, target_date))
+        urls.update(parse_rows(rows, start_datetime, end_datetime))
 
         # 가장 마지막 행의 날짜 확인
         if not rows or datetime.strptime(
                 rows[-1].select_one('span.timestamp').text,
                 "%Y-%m-%d %H:%M:%S"
-        ).date() < target_date:
+        ) < start_datetime:
             break
 
         page_number += 1
@@ -118,12 +118,15 @@ def lambda_handler(event, context):
     car_id = event["car_id"]
     keywords = event["keywords"]
     date = event["date"]
+    batch_num = event["batch"]
+    start_datetime = event["start_datetime"]
+    end_datetime = event["end_datetime"]
     bucket = event["bucket"]
     try:
         s3 = boto3.resource("s3")
         for keyword in keywords:
             logging.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
-            urls = main_crawler(keyword, date)
+            urls = main_crawler(keyword, start_datetime, end_datetime)
             for id, url in urls.items():
                 html_content = fetch_html(url)
                 if not html_content:
@@ -135,8 +138,8 @@ def lambda_handler(event, context):
                     ensure_ascii=False,
                     indent=4
                 )
-                s3.Object(bucket, f"extracted/{car_id}/{date}/raw/clien/{id}.json").put(Body=json_body)
-                logging.info(f"put extracted/{car_id}/{date}/raw/clien/{id}.json to s3")
+                s3.Object(bucket, f"extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json").put(Body=json_body)
+                logging.info(f"put extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json to s3")
                 time.sleep(random.randint(1, 3))
     except Exception as e:
         logging.error(e)
@@ -157,18 +160,9 @@ def lambda_handler(event, context):
             "end_time":datetime.now().isoformat(),
             "duration":time.time() - start_time,
             "car_id": car_id,
-            "date":date
+            "date":date,
+            "batch":batch_num,
+            "start_datetime":start_datetime,
+            "end_datetime":end_datetime,
         }
     }
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    event_json = {
-      "car_id": "ioniq9",
-      "keywords": [
-        "아이오닉"
-      ],
-      "date": "2025-02-09",
-      "bucket": "hmg-5th-crawling-test"
-    }
-    lambda_handler(event_json, "")
