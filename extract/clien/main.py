@@ -151,6 +151,9 @@ def lambda_handler(event, context):
                 "duration":time.time() - start_time,
                 "car_id": car_id,
                 "date":date,
+                "batch": batch_num,
+                "start_datetime": start_datetime,
+                "end_datetime": end_datetime,
             }
         }
     return {
