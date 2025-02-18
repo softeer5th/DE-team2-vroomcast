@@ -564,7 +564,8 @@ def lambda_handler(event, context):
     except:
         logger.info("❌ Crawling Not Finished With Errors")
         print("❌ Crawling Not Finished With Errors")
-        
+        finished_time = time.time()
+        delta = finished_time - init_time
         return {
             "statusCode": 500,
             "body": {
