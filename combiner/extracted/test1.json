@@ -1,0 +1,32 @@
+{
+    "post_id": "clien_232345",
+    "post_url": "https://www.clien.net/posts/232345",
+    "title": "새로 출시된 갤럭시 S25 사용 후기입니다",
+    "content": "이번에 새로 출시된 갤럭시 S25를 2주 정도 사용해봤는데요. 전작과 비교했을 때 카메라 성능이 크게 개선되었고, 특히 야간 촬영 모드가 인상적입니다. 배터리 지속시간도 만족스럽네요.",
+    "author": "테크러버",
+    "created_at": "2025-02-12T14:23:45",
+    "view_count": 1523,
+    "upvote_count": 45,
+    "downvote_count": 2,
+    "comment_count": 2,
+    "comments": [
+        {
+            "comment_id": 1,
+            "content": "저도 구매할까 고민중인데 후기 감사합니다! 배터리가 얼마나 오래가나요?",
+            "is_reply": false,
+            "author": "폰마스터",
+            "created_at": "2025-02-12T14:30:12",
+            "upvote_count": 5,
+            "downvote_count": 0
+        },
+        {
+            "comment_id": 2,
+            "content": "야간 촬영 샘플 좀 올려주실 수 있나요?",
+            "is_reply": false,
+            "author": "사진부자",
+            "created_at": "2025-02-12T15:45:23",
+            "upvote_count": 8,
+            "downvote_count": 0
+        }
+    ]
+}
