@@ -176,4 +176,5 @@ cython_debug/
 /extracted*
 /kia*
 /hyundai*
+/superset
 .DS_Store

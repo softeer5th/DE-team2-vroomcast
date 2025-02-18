@@ -89,18 +89,46 @@ def is_date_in_range(date, start_date_str, end_date_str):
     except ValueError:
         return "Invalid Date Format"
     
+def is_time_in_range(time_str, batch_time):
+  """
+  입력된 시간 문자열이 현재 시간과 현재 시간의 6시간 전 사이에 있는지 판단하는 함수.
+
+  Args:
+    time_str: "%Y-%m-%d %H:%M:%S" 형식의 시간 문자열.
+
+  Returns:
+    True: 입력된 시간이 현재 시간과 현재 시간의 6시간 전 사이에 있는 경우.
+    False: 입력된 시간이 현재 시간과 현재 시간의 6시간 전 사이에 없는 경우.
+  """
+
+  try:
+    input_time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+  except ValueError:
+    return False  # 잘못된 형식의 문자열
+
+  now = datetime.datetime.strptime(batch_time, "%Y-%m-%d %H:%M:%S")
+  six_hours_ago = now - datetime.timedelta(hours=6)
+  print(now)
+  print(input_time, "<-- Input time")
+  print(six_hours_ago)
+
+  return six_hours_ago <= input_time <= now    
 class DC_crawler:
     MAX_TRY = 2
     RETRY_WAITS = 2
     post_link = [
     ]
     
-    def __init__(self, s_date, e_date, car_id, car_keyword):
+    def __init__(self, s_date, e_date, car_id, car_keyword, is_daily_batch):
         self.start_date = s_date
         self.end_date = e_date
         self.car_id = car_id
         self.keyword = car_keyword
         self.search_url = SEARCH_URL_TITLE + car_keyword
+        if is_daily_batch: 
+            self.daily_batch = datetime.now().strftime("%Y-%m-%d")
+            self.start_date = daily_batch
+            self.end_date = daily_batch
     # Chrome WebDriver 선언, Lambda 적용 시 주석 필히 보고 해제할 것!!!!!
     def _get_driver(self,):
         # 이 path는 로컬 실행 시 주석처리 하세요.
@@ -179,7 +207,7 @@ class DC_crawler:
         
         for post in posts:
             # 날짜 검증
-            date = post.select_one("td.gall_date").get_text(strip=True) if post.select_one("td.gall_date") else "날짜 없음"
+            date = post.select_one("td.gall_date")['title'] if post.select_one("td.gall_date") else "날짜 없음"
             date = date_type_for_search_result(date)
             
             if not is_date_in_range(date, self.start_date, self.end_date):
@@ -484,10 +512,12 @@ if __name__=="__main__":
     s_date="2024-12-30"
     e_date="2025-01-02"
     
+    daily_batch = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     logger.info(f"✅ Initiating Crawler : {s_date} ~ {e_date}")
     
     # car_keyword는 lambda_handler에서 event로 처리하게 할 것
-    crawler = DC_crawler(s_date, e_date, car_id="casper", car_keyword="캐스퍼")
+    crawler = DC_crawler(s_date, e_date, car_id="casper", car_keyword="캐스퍼", is_daily_batch=True)
     
     logger.info("Running crawler")
     crawler.run_crawl()
