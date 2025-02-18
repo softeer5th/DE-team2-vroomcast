@@ -85,7 +85,13 @@ def is_time_in_range(time_str, start_time, end_time):
     start_time = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
     end_time = datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
 
-    return start_time <= input_time <= end_time  
+    if start_time <= input_time <= end_time:
+        return "IN"
+    elif input_time > end_time: 
+        return "OVER"
+    else: return "UNDER"
+
+    # return start_time <= input_time <= end_time  
     
 class DC_crawler:
     MAX_TRY = 2
@@ -98,10 +104,11 @@ class DC_crawler:
         self.end_date = e_date
         self.car_id = car_id
         self.keyword = car_keyword
-        self.search_url = SEARCH_URL_TITLE + car_keyword
+        self.search_url = [SEARCH_URL_TITLE + kw for kw in car_keyword]
         self.BUCKET_NAME = bucket_name
         self.folder_date = folder_date
         self.batch = batch
+        self.id_check = []
         self.s3 = boto3.client("s3")
         
     # Chrome WebDriver 선언, Lambda 적용 시 주석 필히 보고 해제할 것!!!!!
@@ -193,10 +200,13 @@ class DC_crawler:
             # 날짜 검증
             date = post.select_one("td.gall_date")['title'] if post.select_one("td.gall_date") else "0000-00-00 00:00:00"
             
-            if not is_time_in_range(date, self.start_date, self.end_date):
-                logger.info(f"❗️ Stopped ▶ Found date : {str(date)}")
-                print(f"❗️ Stopped ▶ Found date : {str(date)}")
+            time_checker = is_time_in_range(date, self.start_date, self.end_date)
+            if time_checker == "UNDER":
+                logger.info(f"❗️ Stopped by found date {str(date)}")
                 return False
+            elif time_checker == "OVER":
+                logger.info(f"❗️ This post Over end_date : {str(date)}")
+                continue
             
             ymd_date = str(date).split()[0]
             
@@ -211,13 +221,18 @@ class DC_crawler:
             title_tag = post.select_one("td.gall_tit.ub-word a")
             link = dc_url + title_tag["href"] if title_tag else "링크 없음"
             
-            post_info = {
-                "url" : link,
-                "id" : gall_num,
-                "date" : date # y-m-d H:M:S
-            }
+            if gall_num not in self.id_check:
+                self.id_check.append(link)
+                post_info = {
+                    "url" : link,
+                    "id" : gall_num,
+                    "date" : date # y-m-d H:M:S
+                }
             
-            self.post_link.append(post_info)
+                self.post_link.append(post_info)
+            else:
+                logger.info("This Link is Already Exists")
+                continue
         return ymd_date
     
     def page_traveler(self, driver:webdriver.Chrome, current_link:str):
@@ -476,24 +491,23 @@ class DC_crawler:
         driver=self._get_driver()
         logger.info("✅ Driver Successfully Set.")
         
-        # 검색 기간 내 가장 최신 게시글 검색 결과 접근
-        end_point = self.get_entry_point(driver, url=self.search_url)
-        # if end_point:
-        #     aws_lambda_logging_ok("✅ Successfully accessed to init date")
-        # else:
-        #     aws_lambda_logging_fail("❌ Failed to access init date")
-            
-        logger.info("✅ Successfully accessed to init date")
-        print("✅ Successfully accessed to init date")
-        # 접근 위치로부터 거슬러 올라가며 게시글 링크 수집
-        self.page_traveler(driver, end_point)
-        print(f"✅ Gathering link completed : {len(self.post_link)} links")
+        for url in self.search_url:
+            # 검색 기간 내 가장 최신 게시글 검색 결과 접근
+            end_point = self.get_entry_point(driver, url=self.search_url)
+            if end_point:
+                logger.info("✅ Successfully accessed to init date")
+                print("✅ Successfully accessed to init date")
+            else:
+                logger.warning(("❌ Failed to access init date"))
+                print("❌ Failed to access init date")
+                
+            # 접근 위치로부터 거슬러 올라가며 게시글 링크 수집
+            self.page_traveler(driver, end_point)
+            print(f"✅ Gathering link completed : {len(self.post_link)} links")
         
         # 수집된 링크를 방문하며 html 소스 저장
         for i, post in enumerate(self.post_link):
-            # print(f"Progressing... [{i+1} / {len(self.post_link)}]")
-            
-            # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
+
             parsed_source = self.get_html_of_post(driver, post['url'])
             res_json = self.html_parser(driver, post, parsed_source)
             
@@ -507,6 +521,8 @@ class DC_crawler:
         return True  
 
 def lambda_handler(event, context):
+    init_time = time.time()
+    
     BUCKET_NAME = event.get('bucket')
     car_id      = event.get('car_id') # santafe
     car_keyword = event.get('keywords') # 싼타페
@@ -525,10 +541,41 @@ def lambda_handler(event, context):
     
     print("Running crawler")
     logger.info("Running crawler")
-    if crawler.run_crawl():
+    try:
+        crawler.run_crawl()
         logger.info("✅ Crawling Finished")
         print("✅ Crawling Finished")
-    else:
+        finished_time = time.time()
+        delta = finished_time - init_time
+        
+        return {
+            "statusCode": 200,
+            "body": {
+                "success": True,
+                "end_time": convert_date_format(datetime.now().strftime("%y-%m-%d %H:%M:%S")),
+                "duration": delta,
+                "car_id": car_id,
+                "date": date,
+                "batch": batch,
+                "start_datetime": s_date,
+                "end_datetime": e_date
+                }
+        }        
+    except:
         logger.info("❌ Crawling Not Finished With Errors")
         print("❌ Crawling Not Finished With Errors")
+        
+        return {
+            "statusCode": 500,
+            "body": {
+                "success": True,
+                "end_time": convert_date_format(datetime.now().strftime("%y-%m-%d %H:%M:%S")),
+                "duration": delta,
+                "car_id": car_id,
+                "date": date,
+                "batch": batch,
+                "start_datetime": s_date,
+                "end_datetime": e_date
+                }
+        }  
     

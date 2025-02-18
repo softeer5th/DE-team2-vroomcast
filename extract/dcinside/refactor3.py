@@ -13,7 +13,7 @@ from dateutil import parser
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 import time, json, logging, requests, os
 from bs4 import BeautifulSoup
-import boto3, random
+import boto3, random, pprint
 
 logging.basicConfig(level=logging.INFO)  # 로그 레벨 설정
 logger = logging.getLogger(__name__)
@@ -75,24 +75,28 @@ def is_time_in_range(time_str, start_time, end_time):
     start_time = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
     end_time = datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
 
-    return start_time <= input_time <= end_time    
-
+    if start_time <= input_time <= end_time:
+        return "IN"
+    elif input_time > end_time: 
+        return "OVER"
+    else: return "UNDER"
+    
+    # return start_time <= input_time <= end_time    
 
 class DC_crawler:
     MAX_TRY = 2
     RETRY_WAITS = 2
     post_link = [
     ]
-    
     def __init__(self, s_date, e_date, car_id, car_keyword, is_daily_batch, batch, folder_date):
         self.start_date = s_date
         self.end_date = e_date
         self.car_id = car_id
         self.keyword = car_keyword
-        self.search_url = SEARCH_URL_TITLE + car_keyword
+        self.search_url = [SEARCH_URL_TITLE + kw for kw in car_keyword]# SEARCH_URL_TITLE + car_keyword
         self.batch = batch
         self.folder_date = folder_date
-        
+        self.id_check = []
     # Chrome WebDriver 선언, Lambda 적용 시 주석 필히 보고 해제할 것!!!!!
     def _get_driver(self,):
         # 이 path는 로컬 실행 시 주석처리 하세요.
@@ -174,9 +178,13 @@ class DC_crawler:
             # 날짜 검증
             date = post.select_one("td.gall_date")['title'] if post.select_one("td.gall_date") else "0000-00-00 00:00:00"
             # print(date)
-            if not is_time_in_range(date, self.start_date, self.end_date):
+            time_checker = is_time_in_range(date, self.start_date, self.end_date)
+            if time_checker == "UNDER":
                 logger.info(f"❗️ Stopped by found date {str(date)}")
                 return False
+            elif time_checker == "OVER":
+                logger.info(f"❗️ This post Over end_date : {str(date)}")
+                continue
             
             ymd_date = str(date).split()[0] # y-m-d
             
@@ -190,13 +198,18 @@ class DC_crawler:
             title_tag = post.select_one("td.gall_tit.ub-word a")
             link = dc_url + title_tag["href"] if title_tag else "링크 없음"
             
-            post_info = {
-                "url" : link,
-                "id" : gall_num,
-                "date" : date # y-m-d H:M:S
-            }
+            if gall_num not in self.id_check:
+                self.id_check.append(link)
+                post_info = {
+                    "url" : link,
+                    "id" : gall_num,
+                    "date" : date # y-m-d H:M:S
+                }
             
-            self.post_link.append(post_info)
+                self.post_link.append(post_info)
+            else:
+                logger.info("This Link is Already Exists")
+                continue
         return ymd_date
     
     def page_traveler(self, driver:webdriver.Chrome, current_link:str):
@@ -433,12 +446,13 @@ class DC_crawler:
         driver=self._get_driver()
         logger.info("✅ Driver Successfully Set.")
         
-        # 검색 기간 내 가장 최신 게시글 검색 결과 접근
-        end_point = self.get_entry_point(driver, url=self.search_url)
-        logger.info("✅ Successfully accessed to init date")
-        
-        # 접근 위치로부터 거슬러 올라가며 게시글 링크 수집
-        self.page_traveler(driver, end_point)
+        for url in self.search_url:
+            # 검색 기간 내 가장 최신 게시글 검색 결과 접근
+            end_point = self.get_entry_point(driver, url=url)
+            logger.info("✅ Successfully accessed to init date")
+            
+            # 접근 위치로부터 거슬러 올라가며 게시글 링크 수집
+            self.page_traveler(driver, end_point)
         
         # 수집된 링크를 방문하며 html 소스 저장
         for i, post in enumerate(self.post_link):
@@ -454,11 +468,12 @@ class DC_crawler:
 
     
 if __name__=="__main__":
+    init_time = time.time()
     
     airflow_json = {
         "bucket": "s3-bucket-name",
-        "keywords": "캐스퍼",
-        "car_id": "casper",
+        "keywords": ["싼타페", '산타페'],
+        "car_id": "santafe",
         "date": "2024-02-14",
         "batch": 0,
         "start_datetime": "2024-02-11T12:30:00",
@@ -475,7 +490,41 @@ if __name__=="__main__":
     crawler = DC_crawler(s_date, e_date, car_id=airflow_json['car_id'], car_keyword=airflow_json['keywords'], is_daily_batch=True, batch = airflow_json['batch'], folder_date=airflow_json['date'])
     
     logger.info("Running crawler")
-    crawler.run_crawl()
+    try:
+        crawler.run_crawl()    
+        logger.info("✅ Crawling Finished")
+            
+        finished_time = time.time()
+        delta = finished_time - init_time
+        
+        return_params = {
+            "statusCode": 200,
+            "body": {
+                "success": True,
+                "end_time": convert_date_format(datetime.now().strftime("%y-%m-%d %H:%M:%S")),
+                "duration": delta,
+                "car_id": airflow_json['car_id'],
+                "date": airflow_json['date'],
+                "batch": airflow_json['batch'],
+                "start_datetime": airflow_json['start_datetime'],
+                "end_datetime": airflow_json['start_datetime']
+                }
+        }
+        pprint.pprint(return_params)
     
-    logger.info("✅ Crawling Finished")
-    
+    except:
+        finished_time = time.time()
+        delta = finished_time - init_time        
+        return_params = {
+            "statusCode": 500,
+            "body": {
+                "success": False,
+                "end_time": convert_date_format(datetime.now().strftime("%y-%m-%d %H:%M:%S")),
+                "duration": delta,
+                "car_id": airflow_json['car_id'],
+                "date": airflow_json['date'],
+                "batch": airflow_json['batch'],
+                "start_datetime": airflow_json['start_datetime'],
+                "end_datetime": airflow_json['start_datetime']
+                }
+    }    
