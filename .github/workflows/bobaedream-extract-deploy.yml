@@ -78,8 +78,10 @@ jobs:
 
     - name: Wait for Lambda to be Active
       run: |
+        sleep 5
         while [[ "$(aws lambda get-function-configuration --function-name "$DEPLOY_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
           echo "Lambda is still pending... waiting 3 seconds"
           sleep 3
         done
         echo "Lambda is ready!"
+        sleep 5
