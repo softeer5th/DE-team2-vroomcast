@@ -98,3 +98,12 @@ jobs:
           response.json \
           --region ap-northeast-2 
         cat response.json
+        
+        # JSON에서 statusCode 추출
+        STATUS_CODE=$(jq '.statusCode' response.json)
+
+        # statusCode가 200이 아닌 경우 실패로 처리
+        if [ "$STATUS_CODE" -ne 200 ]; then
+          echo "Lambda invocation failed with statusCode: $STATUS_CODE"
+          exit 1
+        fi

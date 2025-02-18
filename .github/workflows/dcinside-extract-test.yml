@@ -98,4 +98,14 @@ jobs:
           --payload '{ "car_id": "test-github", "keywords": ["캐스퍼"], "date":"2025-02-10", "batch":3,"start_datetime": "2025-02-08T00:00:00", "end_datetime": "2025-02-11T00:00:00", "bucket": "${{ secrets.AWS_TEST_BUCKET_NAME }}"}' \
           response.json \
           --region ap-northeast-2 
-        cat response.json
+        cat response.json       
+        
+        # JSON에서 statusCode 추출
+        STATUS_CODE=$(jq '.statusCode' response.json)
+
+        # statusCode가 200이 아닌 경우 실패로 처리
+        if [ "$STATUS_CODE" -ne 200 ]; then
+          echo "Lambda invocation failed with statusCode: $STATUS_CODE"
+          exit 1
+        fi
+
