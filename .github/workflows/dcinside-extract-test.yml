@@ -63,17 +63,19 @@ jobs:
           exit 1
         fi
         
+        IMAGE_URI_WITH_DIGEST="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME@${LOCAL_DIGEST}"
+    
         echo "Creating or Updating Test Lambda: $TEST_LAMBDA_NAME"
         aws lambda create-function \
           --function-name $TEST_LAMBDA_NAME \
           --package-type Image \
-          --code ImageUri=$IMAGE_URI \
+          --code ImageUri=$IMAGE_URI_WITH_DIGEST \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
           --timeout 180 \
           --region ap-northeast-2 || \
         aws lambda update-function-code \
           --function-name $TEST_LAMBDA_NAME \
-          --image-uri $IMAGE_URI \
+          --image-uri $IMAGE_URI_WITH_DIGEST \
           --region ap-northeast-2
 
     - name: Wait for Lambda to be Active
@@ -93,7 +95,7 @@ jobs:
         echo "Invoking Test Lambda: $TEST_LAMBDA_NAME"
         aws lambda invoke --function-name $TEST_LAMBDA_NAME \
           --cli-binary-format raw-in-base64-out \
-          --payload '{ "car_id": "test-github", "keywords": ["캐스퍼"], "date":"2025-02-10", "batch":3,"start_datetime": "2025-02-10T09:00:00", "end_datetime": "2025-02-10T12:00:00", "bucket": "${{ secrets.AWS_TEST_BUCKET_NAME }}"}' \
+          --payload '{ "car_id": "test-github", "keywords": ["캐스퍼"], "date":"2025-02-10", "batch":3,"start_datetime": "2025-02-08T00:00:00", "end_datetime": "2025-02-11T00:00:00", "bucket": "${{ secrets.AWS_TEST_BUCKET_NAME }}"}' \
           response.json \
           --region ap-northeast-2 
         cat response.json
