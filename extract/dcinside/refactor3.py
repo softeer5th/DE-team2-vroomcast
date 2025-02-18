@@ -472,7 +472,7 @@ if __name__=="__main__":
     
     airflow_json = {
         "bucket": "s3-bucket-name",
-        "keywords": ["싼타페", '산타페'],
+        "keywords": ['산타페'],
         "car_id": "santafe",
         "date": "2024-02-14",
         "batch": 0,

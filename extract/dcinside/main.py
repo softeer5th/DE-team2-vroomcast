@@ -493,7 +493,7 @@ class DC_crawler:
         
         for url in self.search_url:
             # 검색 기간 내 가장 최신 게시글 검색 결과 접근
-            end_point = self.get_entry_point(driver, url=self.search_url)
+            end_point = self.get_entry_point(driver, url=url)
             if end_point:
                 logger.info("✅ Successfully accessed to init date")
                 print("✅ Successfully accessed to init date")
@@ -525,7 +525,7 @@ def lambda_handler(event, context):
     
     BUCKET_NAME = event.get('bucket')
     car_id      = event.get('car_id') # santafe
-    car_keyword = event.get('keywords') # 싼타페
+    car_keyword = event.get('keywords') # ["싼타페"]
     date        = event.get('date') # 2025-02-10
     batch       = event.get('batch')
     s_date      = event.get('start_datetime')
