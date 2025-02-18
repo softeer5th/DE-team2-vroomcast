@@ -79,12 +79,14 @@ jobs:
 
     - name: Wait for Lambda to be Active
       run: |
+        sleep 5
         LAMBDA_NAME=$(basename $TARGET_DIR)
         TEST_LAMBDA_NAME="test-extract-$LAMBDA_NAME"
         while [[ "$(aws lambda get-function-configuration --function-name "$TEST_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
           echo "Lambda is still pending... waiting 3 seconds"
           sleep 3
         done
+        sleep 5
         echo "Lambda is ready!"
 
     - name: Invoke Test Lambda
@@ -98,3 +100,12 @@ jobs:
           response.json \
           --region ap-northeast-2 
         cat response.json
+        
+        # JSON에서 statusCode 추출
+        STATUS_CODE=$(jq '.statusCode' response.json)
+
+        # statusCode가 200이 아닌 경우 실패로 처리
+        if [ "$STATUS_CODE" -ne 200 ]; then
+          echo "Lambda invocation failed with statusCode: $STATUS_CODE"
+          exit 1
+        fi
