@@ -16,7 +16,8 @@ BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
 TRIAL_LIMIT = 10
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def fetch_html(url: str) -> str:
     """URL로부터 HTML 콘텐츠를 가져옵니다."""
@@ -24,14 +25,14 @@ def fetch_html(url: str) -> str:
     while i < TRIAL_LIMIT:
         try:
             response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0"}, allow_redirects=True)
-            logging.info(f"{response.status_code} from {url}")
+            logger.info(f"{response.status_code} from {url}")
             if response.status_code != 200:
                 i += 1
                 continue
             return response.text
         except Exception as e:
             i += 1
-            logging.warning(f"{e} from {url}")
+            logger.warning(f"{e} from {url}")
             print(f"{e} from {url}")
             time.sleep(random.randint(*SLEEP_SECONDS))
             print("Retrying...")
@@ -72,15 +73,15 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
     while page_number < 50:
         # URL 생성 및 요청
         search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
-        logging.info(f"Fetching URL: {search_url}")
+        logger.info(f"Fetching URL: {search_url}")
         html_content = fetch_html(search_url)
         if not html_content:
-            logging.error(f"failed to fetch {search_url}")
+            logger.error(f"failed to fetch {search_url}")
             continue
         # 응답 파싱 및 필터링
         soup = BeautifulSoup(html_content, "html.parser")
         rows = soup.select("div.list_item.symph_row.jirum")
-        logging.info(f"Parsing {len(rows)} rows.")
+        logger.info(f"Parsing {len(rows)} rows.")
         urls.update(parse_rows(rows, start_datetime, end_datetime))
 
         # 가장 마지막 행의 날짜 확인
@@ -93,7 +94,7 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
         page_number += 1
         time.sleep(random.randint(*SLEEP_SECONDS))  # 요청 간 대기 시간
 
-    logging.info(f"Extracted {len(urls)} URLs.")
+    logger.info(f"Extracted {len(urls)} URLs.")
     return urls
 
 def save_to_s3(s3, bucket, object_key, data):
@@ -125,12 +126,12 @@ def lambda_handler(event, context):
     try:
         s3 = boto3.resource("s3")
         for keyword in keywords:
-            logging.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
+            logger.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
             urls = main_crawler(keyword, start_datetime, end_datetime)
             for id, url in urls.items():
                 html_content = fetch_html(url)
                 if not html_content:
-                    logging.error(f"failed to fetch {url}")
+                    logger.error(f"failed to fetch {url}")
                     continue
                 dump_data = get_post_dict(html_content, id, url)
                 json_body = json.dumps(
@@ -139,10 +140,10 @@ def lambda_handler(event, context):
                     indent=4
                 )
                 s3.Object(bucket, f"extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json").put(Body=json_body)
-                logging.info(f"put extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json to s3")
+                logger.info(f"put extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json to s3")
                 time.sleep(random.randint(1, 3))
     except Exception as e:
-        logging.error(e)
+        logger.error(e)
         return {
             "statusCode": 500,
             "body": {
