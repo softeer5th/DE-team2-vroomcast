@@ -3,24 +3,36 @@ import logging
 import os
 from datetime import datetime
 from itertools import islice
+import re
 from typing import Any
 
 import boto3
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 EXTRACTED_PATH = "extracted/{car_id}/{date}/raw/"
+ID_PATH = "id_set.txt"
 
-POST_PATH = "combined/{car_id}/{date}/post.parquet"
-COMMENT_PATH = "combined/{car_id}/{date}/comment.parquet"
+POST_PATH = "combined/{car_id}/{date}/{type}/post_{chunk}.parquet"
+COMMENT_PATH = "combined/{car_id}/{date}/{type}/comment_{chunk}.parquet"
 
-POST_SCHEMA = pa.schema(
+POST_STATIC_SCHEMA = pa.schema(
     [
-        pa.field("post_id", pa.int64(), nullable=False),
-        pa.field("post_url", pa.string(), nullable=False),
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("url", pa.string(), nullable=False),
         pa.field("title", pa.string(), nullable=False),
         pa.field("content", pa.string(), nullable=False),
         pa.field("created_at", pa.timestamp('s'), nullable=False),
+    ]
+)
+
+POST_DYNAMIC_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("extracted_at", pa.timestamp('s'), nullable=False),
         pa.field("view_count", pa.int64(), nullable=True),
         pa.field("upvote_count", pa.int64(), nullable=True),
         pa.field("downvote_count", pa.int64(), nullable=True),
@@ -28,21 +40,41 @@ POST_SCHEMA = pa.schema(
     ]
 )
 
-COMMENT_SCHEMA = pa.schema(
+COMMENT_STATIC_SCHEMA = pa.schema(
     [
-        pa.field("comment_id", pa.int64(), nullable=False),
-        pa.field("post_id", pa.int64(), nullable=False),
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("post_id", pa.string(), nullable=False),
         pa.field("content", pa.string(), nullable=False),
-        pa.field("is_reply", pa.bool_(), nullable=True),
+        pa.field("is_reply", pa.bool_(), nullable=False),
         pa.field("created_at", pa.timestamp('s'), nullable=False),
+    ]
+)
+
+COMMENT_DYNAMIC_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("extracted_at", pa.timestamp('s'), nullable=False),
         pa.field("upvote_count", pa.int64(), nullable=True),
         pa.field("downvote_count", pa.int64(), nullable=True),
     ]
 )
 
+POST_CAR_SCHEMA = pa.schema(
+    [
+        pa.field("car_id", pa.int64(), nullable=False),
+        pa.field("post_id", pa.int64(), nullable=False),
+    ]
+)
+
 def _parse_datetime(date_str: str) -> datetime:
-    # ISO 형식의 문자열을 datetime으로 변환
     return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+
+def _extract_community_from_path(path: str) -> str:
+    # extracted/{car_id}/{date}/raw/{community}/{post_id}.json 형식에서 community 추출
+    match = re.search(r'raw/([^/]+)/[^/]+\.json$', path)
+    if not match:
+        raise ValueError(f"Invalid path format: {path}")
+    return match.group(1)
 
 def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str):
     response = s3.list_objects_v2(
@@ -55,150 +87,180 @@ def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str):
     matched_files = []
     for obj in response.get("Contents", []):
         key: str = obj["Key"]
-        if key.endswith(".json"):  # 패턴의 마지막 부분 체크
+        if key.endswith(".json"):
             matched_files.append(key)
 
     return matched_files
 
+def read_id_set(s3: Any, bucket: str) -> set[str]:
+    try:
+        response = s3.get_object(Bucket=bucket, Key=ID_PATH)
+        text: str = response["Body"].read().decode("utf-8")
+        id_set = set(line.strip() for line in text.splitlines() if line.strip())
+        return id_set
+    except s3.exceptions.NoSuchKey:
+        return set()
 
 def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str):
     paths = _get_extracted_data_paths(s3, bucket, car_id, date)
     if not paths:
-        logging.info("No data found in the extracted directory")
+        logger.info("No data found in the extracted directory")
         return
 
     for path in paths:
         try:
+            community = _extract_community_from_path(path)
             response = s3.get_object(Bucket=bucket, Key=path)
             content = response["Body"].read().decode("utf-8")
             data = json.loads(content)
+            data['community'] = community
             yield data
         except Exception as e:
-            logging.error(f"Failed to process file {path}: {str(e)}")
+            logger.error(f"Failed to process file {path}: {str(e)}")
             raise
 
-
-def _split_data(data: dict) -> tuple[dict, list[dict]]:
-    post = {
-        "post_id": data["post_id"],
-        "post_url": data["post_url"],
+def _split_data(data: dict, batch_datetime: str) -> tuple[dict, list[dict]]:
+    community = data['community']
+    post_id = f"{community}_post_{data['post_id']}"
+    
+    post_static = {
+        "id": post_id,
+        "url": data["post_url"],
         "title": data["title"],
         "content": data["content"],
         "created_at": _parse_datetime(data["created_at"]),
+    }
+
+    post_dynamic = {
+        "id": post_id,
+        "extracted_at": _parse_datetime(batch_datetime),
         "view_count": data.get("view_count", None),
         "upvote_count": data.get("upvote_count", None),
         "downvote_count": data.get("downvote_count", None),
         "comment_count": data.get("comment_count", None),
     }
 
-    post_comments = []
+    post = {
+        "post_static": post_static,
+        "post_dynamic": post_dynamic,
+    }
+
+    comments = []
     for comment in data["comments"]:
-        comment_data = {
-            "comment_id": comment["comment_id"],
-            "post_id": data["post_id"],
+        comment_id = f"{community}_comment_{comment['comment_id']}"
+
+        comment_static = {
+            "id": comment_id,
+            "post_id": post_id,
             "content": comment["content"],
             "is_reply": comment["is_reply"],
             "created_at": _parse_datetime(comment["created_at"]),
+        }
+
+        comment_dynamic = {
+            "id": comment_id,
+            "extracted_at": _parse_datetime(batch_datetime),
             "upvote_count": comment.get("upvote_count", None),
             "downvote_count": comment.get("downvote_count", None),
         }
-        post_comments.append(comment_data)
 
-    return post, post_comments
+        comments.append({
+            "comment_static": comment_static,
+            "comment_dynamic": comment_dynamic,
+        })
 
+    return post, comments
 
-def _store_combined_data(
-    car_id: str, date: str, posts: list[dict], comments: list[dict]
-):
-    posts_table = pa.Table.from_pylist(posts, schema=POST_SCHEMA)
-    comments_table = pa.Table.from_pylist(comments, schema=COMMENT_SCHEMA)
-
-    post_tmp_path = os.path.join("/tmp", POST_PATH.format(car_id=car_id, date=date))
-    comment_tmp_path = os.path.join(
-        "/tmp", COMMENT_PATH.format(car_id=car_id, date=date)
-    )
-
-    os.makedirs(os.path.dirname(post_tmp_path), exist_ok=True)
-    os.makedirs(os.path.dirname(comment_tmp_path), exist_ok=True)
-
+def _upload_id_set(s3: Any, bucket: str, id_set: set[str]):
     try:
-        existing_posts = pq.read_table(post_tmp_path)
-        existing_comments = pq.read_table(comment_tmp_path)
-
-        posts_table = pa.concat_tables([existing_posts, posts_table])
-        comments_table = pa.concat_tables([existing_comments, comments_table])
-    except (FileNotFoundError, OSError):
-        pass
-
-    pq.write_table(posts_table, post_tmp_path)
-    pq.write_table(comments_table, comment_tmp_path)
-
-
-def _write_combined_data(s3: Any, bucket: str, car_id: str, date: str):
-    post_s3_path = POST_PATH.format(car_id=car_id, date=date)
-    comment_s3_path = COMMENT_PATH.format(car_id=car_id, date=date)
-
-    post_tmp_path = os.path.join("/tmp", post_s3_path)
-    comment_tmp_path = os.path.join("/tmp", comment_s3_path)
-
-    try:
-        with open(post_tmp_path, "rb") as f:
-            s3.upload_fileobj(f, bucket, post_s3_path)
-        with open(comment_tmp_path, "rb") as f:
-            s3.upload_fileobj(f, bucket, comment_s3_path)
-
-        os.remove(post_tmp_path)
-        os.remove(comment_tmp_path)
-
-        logging.info(
-            f"Successfully uploaded combined data for car_id: {car_id}, date: {date}"
-        )
+        text = "\n".join(id_set)
+        s3.put_object(Bucket=bucket, Key=ID_PATH, Body=text)
     except Exception as e:
-        logging.error(f"Error uploading combined data: {str(e)}")
-        raise
+        logger.error(f"Error uploading id set: {str(e)}")
 
-
-def combine(bucket: str, car_id: str, date: str):
+def combine(bucket: str, car_id: str, date: str, batch_datetime: str):
     s3 = boto3.client("s3")
-
     extracted_data = _read_extracted_data(s3, bucket, car_id, date)
+    id_set = read_id_set(s3, bucket)
 
-    batch_size = 30
+    def _upload_data(data: list[dict], schema: Any, path: str):
+        try:
+            table = pa.Table.from_pylist(data, schema=schema)
+            
+            buffer = pa.BufferOutputStream()
+            pq.write_table(table, buffer)
+            
+            s3.put_object(
+                Bucket=bucket,
+                Key=path,
+                Body=buffer.getvalue().to_pybytes()
+            )
+        except Exception as e:
+            logger.error(f"Error uploading data: {str(e)}")
+
+    chunk_idx = 0
+    chunk_size = 20
 
     while True:
-        batch = list(islice(extracted_data, batch_size))
-        posts = []
-        comments = []
-
-        for data in batch:
-            post, post_comments = _split_data(data)
-            posts.append(post)
-            comments.extend(post_comments)
-
-        if not posts:
+        chunk = list(islice(extracted_data, chunk_size))
+        if not chunk:
             break
 
-        _store_combined_data(car_id, date, posts, comments)
+        post_statics = []
+        post_dynamics = []
+        comment_statics = []
+        comment_dynamics = []
 
-    _write_combined_data(s3, bucket, car_id, date)
+        for data in chunk:
+            post, comments = _split_data(data, batch_datetime)
 
+            if post["post_static"]["id"] not in id_set:
+                post_statics.append(post["post_static"])
+                id_set.add(post["post_static"]["id"])
+            post_dynamics.append(post["post_dynamic"])
+
+            for comment in comments:
+                if comment["comment_static"]["id"] not in id_set:
+                    comment_statics.append(comment["comment_static"])
+                    id_set.add(comment["comment_static"]["id"])
+                comment_dynamics.append(comment["comment_dynamic"])
+
+        logger.info(f"Uploading chunk {chunk_idx} for car_id: {car_id}, date: {date}")
+        logger.info(f"Post statics: {len(post_statics)}, Post dynamics: {len(post_dynamics)}")
+        logger.info(f"Comment statics: {len(comment_statics)}, Comment dynamics: {len(comment_dynamics)}")
+                        
+        if post_statics:
+            _upload_data(post_statics, POST_STATIC_SCHEMA, POST_PATH.format(car_id=car_id, date=date, type="static", chunk=chunk_idx))
+
+        if comment_statics:
+            _upload_data(comment_statics, COMMENT_STATIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, type="static", chunk=chunk_idx))
+
+        if post_dynamics:
+            _upload_data(post_dynamics, POST_DYNAMIC_SCHEMA, POST_PATH.format(car_id=car_id, date=date, type="dynamic", chunk=chunk_idx))
+
+        if comment_dynamics:
+            _upload_data(comment_dynamics, COMMENT_DYNAMIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, type="dynamic", chunk=chunk_idx))
+
+    _upload_id_set(s3, bucket, id_set)
+
+    chunk_idx += 1
 
 def lambda_handler(event, context):
     start_time = datetime.now()
     try:
-        logging.basicConfig(level=logging.INFO)
 
         bucket = event.get("bucket")
         car_id = event.get("car_id")
         date = event.get("date")
+        batch_datetime = event.get("batch_datetime")
 
         if not all([bucket, car_id, date]):
             raise ValueError("Missing required input")
 
+        combine(bucket, car_id, date, batch_datetime)
+
         end_time = datetime.now()
         duration = end_time - start_time
-
-        combine(bucket, car_id, date)
 
         return {
             "statusCode": 200,
@@ -208,11 +270,12 @@ def lambda_handler(event, context):
                 "duration": duration.total_seconds(),
                 "car_id": car_id,
                 "date": date,
+                "batch_datetime": batch_datetime,
             },
         }
 
     except Exception as e:
-        logging.error(f"Error in lambda_handler: {e}")
+        logger.error(f"Error in lambda_handler: {e}")
 
         end_time = datetime.now()
         duration = end_time - start_time
@@ -225,6 +288,7 @@ def lambda_handler(event, context):
                 "duration": duration.total_seconds(),
                 "car_id": car_id,
                 "date": date,
+                "batch_datetime": batch_datetime,
                 "error": str(e),
             },
         }
