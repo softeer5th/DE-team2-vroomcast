@@ -1,11 +1,20 @@
 #!/bin/bash
 set -e  # 에러 발생 시 즉시 종료
+sudo yum update -y
 
-# 필수 패키지 설치
 sudo yum install -y python3-devel
 
-# 최신 wheel 설치
-pip3 install --upgrade wheel
+echo "Ensuring pip3 is up-to-date..."
+python3 -m ensurepip
+python3 -m pip install --upgrade pip
 
-# KSS 설치 (캐시 없이)
-pip3 install --no-cache-dir kss
+echo "Installing latest wheel package..."
+sudo python3 -m pip install --upgrade wheel
+
+echo "Installing KSS (Korean Sentence Splitter)..."
+sudo python3 -m pip install kss
+
+echo "Installing OpenAI library..."
+sudo python3 -m pip install openai
+
+sudo python3 -m pip install pandas

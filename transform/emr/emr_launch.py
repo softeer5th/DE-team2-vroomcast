@@ -49,6 +49,26 @@ response = emr_client.run_job_flow(
         }
     ],
     AutoTerminationPolicy={"IdleTimeout": 3600},  # 1시간 후 자동 종료
+    Steps=[
+        {
+            "Name": "Run Spark Job",
+            "ActionOnFailure": "CONTINUE",
+            "HadoopJarStep": {
+                "Jar": "command-runner.jar",
+                "Args": [
+                    "spark-submit",
+                    "--deploy-mode", "cluster",
+                    "--conf", f"spark.executorEnv.OPENAI_API_KEY={os.getenv('OPENAI_API_KEY')}",
+                    "--conf", f"spark.driver.extraJavaOptions=-DOPENAI_API_KEY={os.getenv('OPENAI_API_KEY')}",
+                    s3_script_path,
+                    "--bucket", bucket,
+                    "--input_post_paths", input_post_path,
+                    "--input_comment_paths", input_comment_path,
+                    "--output_dir", output_dir
+                ],
+            },
+        }
+    ]
 )
 
 print(f"EMR Cluster created with ID: {response['JobFlowId']}")
