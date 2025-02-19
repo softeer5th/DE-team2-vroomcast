@@ -5,6 +5,7 @@ from airflow.models import Variable
 
 # AIRFLOW_VAR_로 시작하는 환경 변수는 자동으로 Airflow Variable이 됨
 S3_BUCKET = Variable.get("S3_BUCKET")
+S3_CONFIG_BUCKET = Variable.get("S3_CONFIG_BUCKET")
 
 BATCH_INTERVAL_MINUTES = int(Variable.get("BATCH_INTERVAL_MINUTES"))
 BATCH_DURATION_HOURS = int(Variable.get("BATCH_DURATION_HOURS"))

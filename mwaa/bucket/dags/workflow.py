@@ -7,11 +7,14 @@ from airflow import DAG
 from airflow.models import Variable
 from airflow.providers.amazon.aws.operators.lambda_function import \
     LambdaInvokeFunctionOperator
+from modules.combiner import create_combine_task
 from modules.constants import (BATCH_DURATION_HOURS, BATCH_INTERVAL_MINUTES,
                                CARS, COMMUNITIES, CONFIG_PATH, S3_BUCKET)
 from modules.extractor import create_extract_task
 from modules.monitor import create_monitor_extract_task
-from modules.combiner import create_combine_task
+from modules.transformer import (create_check_emr_termination_task,
+                                 create_execute_emr_task,
+                                 create_terminate_emr_cluster_task)
 
 logger = logging.getLogger(__name__)
 
@@ -29,28 +32,26 @@ with DAG(
     "vroomcast_workflow",
     default_args=default_args,
     description="Data pipeline workflow for Vroomcast",
-    schedule_interval=timedelta(minutes=BATCH_INTERVAL_MINUTES),
+    schedule_interval=None,  # timedelta(minutes=BATCH_INTERVAL_MINUTES),
     catchup=False,
+    max_active_runs=1,
+    user_defined_macros={"BATCH_DURATION_HOURS": BATCH_DURATION_HOURS},
 ) as dag:
     logger.info("=== Starting DAG Task Creation ===")
 
-    cur_time = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-
-    ref_dt = cur_time
-    ref_date = datetime.fromisoformat(ref_dt).strftime('%Y-%m-%d')  # '2024-02-19'
-    ref_time = datetime.fromisoformat(ref_dt).strftime('%H:%M:%S')  # '04:00:00'
+    ref_dt = "{{ execution_date.strftime('%Y-%m-%dT%H:%M:%S') }}"
+    ref_date = "{{ execution_date.strftime('%Y-%m-%d') }}"
+    ref_time = "{{ execution_date.strftime('%H:%M:%S') }}"
 
     logger.info(f"Reference date: {ref_date}")
     logger.info(f"Reference time: {ref_time}")
 
-    # 현재 시간을 기준으로 추출 기간 설정
-    end_datetime = ref_dt
-    start_datetime = (
-        datetime.fromisoformat(ref_dt) - timedelta(hours=BATCH_DURATION_HOURS)
-    ).strftime('%Y-%m-%dT%H:%M:%S')
+    # 현재 시간을 기준으로 추출 기간 시작 시간과 종료 시간 설정
+    end_datetime = "{{ execution_date.strftime('%Y-%m-%dT%H:%M:%S') }}"
+    start_datetime = "{{ (execution_date - macros.timedelta(hours=BATCH_DURATION_HOURS)).strftime('%Y-%m-%dT%H:%M:%S') }}"
 
     # 하루의 시작(00:00)부터 몇 분이 지났는지
-    batch = (datetime.fromisoformat(cur_time).hour * 60) + datetime.fromisoformat(cur_time).minute
+    batch = "{{ (execution_date.hour * 60) + execution_date.minute }}"
 
     extract_tasks = []
     monitor_extract_tasks = []
@@ -73,7 +74,7 @@ with DAG(
             car_extract_tasks.append(extract_task)
 
         # Combine 태스크 생성
-        combine_task = create_combine_task(dag, car_id, ref_dt)
+        combine_task = create_combine_task(dag, car_id, ref_date, batch, ref_dt)
         logger.info(f"Setting dependencies for combine task: {combine_task.task_id}")
 
         # Validate 태스크들과 Combine 태스크 간의 dependency 설정
@@ -87,6 +88,17 @@ with DAG(
     # Monitor Extract 태스크 생성
     monitor_extract_task = create_monitor_extract_task(dag)
     extract_tasks >> monitor_extract_task
+
+    execute_emr_task = create_execute_emr_task(dag, ref_date, batch)
+    check_emr_termination_task = create_check_emr_termination_task(dag)
+    terminate_emr_cluster_task = create_terminate_emr_cluster_task(dag)
+
+    (
+        combine_tasks
+        >> execute_emr_task
+        >> check_emr_termination_task
+        >> terminate_emr_cluster_task
+    )
 
     logger.info("\n=== Task Creation Summary ===")
     logger.info(f"Total extract tasks: {len(extract_tasks)}")
