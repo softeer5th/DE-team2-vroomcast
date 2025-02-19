@@ -34,16 +34,23 @@ with DAG(
 ) as dag:
     logger.info("=== Starting DAG Task Creation ===")
 
+    cur_time = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+
+    ref_dt = cur_time
+    ref_date = datetime.fromisoformat(ref_dt).strftime('%Y-%m-%d')  # '2024-02-19'
+    ref_time = datetime.fromisoformat(ref_dt).strftime('%H:%M:%S')  # '04:00:00'
+
+    logger.info(f"Reference date: {ref_date}")
+    logger.info(f"Reference time: {ref_time}")
+
     # 현재 시간을 기준으로 추출 기간 설정
-    end_datetime = "{{ execution_date }}"
+    end_datetime = ref_dt
     start_datetime = (
-        "{{ execution_date - macros.timedelta(hours="
-        + str(BATCH_DURATION_HOURS)
-        + ") }}"
-    )
+        datetime.fromisoformat(ref_dt) - timedelta(hours=BATCH_DURATION_HOURS)
+    ).strftime('%Y-%m-%dT%H:%M:%S')
 
     # 하루의 시작(00:00)부터 몇 분이 지났는지
-    batch = "{{ ((execution_date.hour * 60) + execution_date.minute) }}"
+    batch = (datetime.fromisoformat(cur_time).hour * 60) + datetime.fromisoformat(cur_time).minute
 
     extract_tasks = []
     monitor_extract_tasks = []
@@ -66,7 +73,7 @@ with DAG(
             car_extract_tasks.append(extract_task)
 
         # Combine 태스크 생성
-        combine_task = create_combine_task(dag, car_id)
+        combine_task = create_combine_task(dag, car_id, ref_dt)
         logger.info(f"Setting dependencies for combine task: {combine_task.task_id}")
 
         # Validate 태스크들과 Combine 태스크 간의 dependency 설정
