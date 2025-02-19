@@ -13,11 +13,11 @@ import pyarrow.parquet as pq
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-EXTRACTED_PATH = "extracted/{car_id}/{date}/raw/"
+EXTRACTED_PATH = "extracted/{car_id}/{date}/{batch}/raw/"
 ID_PATH = "id_set.txt"
 
-POST_PATH = "combined/{car_id}/{date}/{type}/post_{chunk}.parquet"
-COMMENT_PATH = "combined/{car_id}/{date}/{type}/comment_{chunk}.parquet"
+POST_PATH = "combined/{car_id}/{date}/{batch}/{type}/post_{chunk}.parquet"
+COMMENT_PATH = "combined/{car_id}/{date}/{batch}/{type}/comment_{chunk}.parquet"
 
 POST_STATIC_SCHEMA = pa.schema(
     [
@@ -178,7 +178,7 @@ def _upload_id_set(s3: Any, bucket: str, id_set: set[str]):
     except Exception as e:
         logger.error(f"Error uploading id set: {str(e)}")
 
-def combine(bucket: str, car_id: str, date: str, batch_datetime: str):
+def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str):
     s3 = boto3.client("s3")
     extracted_data = _read_extracted_data(s3, bucket, car_id, date)
     id_set = read_id_set(s3, bucket)
@@ -230,16 +230,16 @@ def combine(bucket: str, car_id: str, date: str, batch_datetime: str):
         logger.info(f"Comment statics: {len(comment_statics)}, Comment dynamics: {len(comment_dynamics)}")
                         
         if post_statics:
-            _upload_data(post_statics, POST_STATIC_SCHEMA, POST_PATH.format(car_id=car_id, date=date, type="static", chunk=chunk_idx))
+            _upload_data(post_statics, POST_STATIC_SCHEMA, POST_PATH.format(car_id=car_id, date=date, batch=batch, type="static", chunk=chunk_idx))
 
         if comment_statics:
-            _upload_data(comment_statics, COMMENT_STATIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, type="static", chunk=chunk_idx))
+            _upload_data(comment_statics, COMMENT_STATIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, batch=batch, type="static", chunk=chunk_idx))
 
         if post_dynamics:
-            _upload_data(post_dynamics, POST_DYNAMIC_SCHEMA, POST_PATH.format(car_id=car_id, date=date, type="dynamic", chunk=chunk_idx))
+            _upload_data(post_dynamics, POST_DYNAMIC_SCHEMA, POST_PATH.format(car_id=car_id, date=date, batch=batch, type="dynamic", chunk=chunk_idx))
 
         if comment_dynamics:
-            _upload_data(comment_dynamics, COMMENT_DYNAMIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, type="dynamic", chunk=chunk_idx))
+            _upload_data(comment_dynamics, COMMENT_DYNAMIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, batch=batch, type="dynamic", chunk=chunk_idx))
 
     _upload_id_set(s3, bucket, id_set)
 
@@ -252,12 +252,13 @@ def lambda_handler(event, context):
         bucket = event.get("bucket")
         car_id = event.get("car_id")
         date = event.get("date")
+        batch = event.get("batch")
         batch_datetime = event.get("batch_datetime")
 
-        if not all([bucket, car_id, date]):
+        if not all([bucket, car_id, date, batch, batch_datetime]):
             raise ValueError("Missing required input")
 
-        combine(bucket, car_id, date, batch_datetime)
+        combine(bucket, car_id, date, batch, batch_datetime)
 
         end_time = datetime.now()
         duration = end_time - start_time
@@ -270,6 +271,7 @@ def lambda_handler(event, context):
                 "duration": duration.total_seconds(),
                 "car_id": car_id,
                 "date": date,
+                "batch": batch,
                 "batch_datetime": batch_datetime,
             },
         }
