@@ -76,9 +76,9 @@ def _extract_community_from_path(path: str) -> str:
         raise ValueError(f"Invalid path format: {path}")
     return match.group(1)
 
-def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str):
+def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str, batch: int):
     response = s3.list_objects_v2(
-        Bucket=bucket, Prefix=EXTRACTED_PATH.format(car_id=car_id, date=date)
+        Bucket=bucket, Prefix=EXTRACTED_PATH.format(car_id=car_id, date=date, batch=batch)
     )
 
     if "Contents" not in response:
@@ -101,8 +101,8 @@ def read_id_set(s3: Any, bucket: str) -> set[str]:
     except s3.exceptions.NoSuchKey:
         return set()
 
-def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str):
-    paths = _get_extracted_data_paths(s3, bucket, car_id, date)
+def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str, batch: int):
+    paths = _get_extracted_data_paths(s3, bucket, car_id, date, batch)
     if not paths:
         logger.info("No data found in the extracted directory")
         return
@@ -180,7 +180,7 @@ def _upload_id_set(s3: Any, bucket: str, id_set: set[str]):
 
 def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str):
     s3 = boto3.client("s3")
-    extracted_data = _read_extracted_data(s3, bucket, car_id, date)
+    extracted_data = _read_extracted_data(s3, bucket, car_id, date, batch)
     id_set = read_id_set(s3, bucket)
 
     def _upload_data(data: list[dict], schema: Any, path: str):
@@ -290,6 +290,7 @@ def lambda_handler(event, context):
                 "duration": duration.total_seconds(),
                 "car_id": car_id,
                 "date": date,
+                "batch": batch,
                 "batch_datetime": batch_datetime,
                 "error": str(e),
             },
