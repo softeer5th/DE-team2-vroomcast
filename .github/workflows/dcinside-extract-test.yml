@@ -45,7 +45,7 @@ jobs:
         docker build -t vroomcast/$TEST_LAMBDA_NAME $TARGET_DIR
         docker tag vroomcast/$TEST_LAMBDA_NAME:latest $IMAGE_URI
         docker push $IMAGE_URI
-        
+
         echo "Check latest image has same digest with expected one"
         LOCAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_URI | cut -d '@' -f 2)
         for i in {1..10}; do
