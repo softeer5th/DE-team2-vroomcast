@@ -1,6 +1,8 @@
 from selenium import webdriver
+from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from tempfile import mkdtemp
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -100,29 +102,37 @@ class DC_crawler:
         self.s3 = boto3.client("s3")
         
     # Chrome WebDriver 선언, Lambda 적용 시 주석 필히 보고 해제할 것!!!!!
-    def _get_driver(self,):
-        # 이 path는 로컬 실행 시 주석처리 하세요.
-        # chrome_path = "/opt/chrome/chrome-headless-shell-mac-arm64"
-        # driver_path = "/opt/chromedriver"   
+    def get_driver():
+        chrome_options = ChromeOptions()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-dev-tools")
+        chrome_options.add_argument("--no-zygote")
+        chrome_options.add_argument("--single-process")
+        chrome_options.add_argument(f"--user-data-dir={mkdtemp()}")
+        chrome_options.add_argument(f"--data-path={mkdtemp()}")
+        chrome_options.add_argument(f"--disk-cache-dir={mkdtemp()}")
+        chrome_options.add_argument("--remote-debugging-pipe")
+        chrome_options.add_argument("--verbose")
+        chrome_options.add_argument("--log-path=/tmp")
+        chrome_options.binary_location = "/opt/chrome/chrome-linux64/chrome"
+        prefs = {
+            "profile.managed_default_content_settings.images": 2,  # 이미지 비활성화
+            "profile.managed_default_content_settings.ads": 2,     # 광고 비활성화
+            "profile.managed_default_content_settings.media": 2    # 비디오, 오디오 비활성화
+        }
+        chrome_options.add_experimental_option("prefs", prefs)
 
-        options = webdriver.ChromeOptions()
-        
-        options.add_argument("--headless")  # Headless 모드
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--single-process")
-        # options.add_argument("user-agent=Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)")
-        options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0")
-        options.add_argument("--window-size=1420, 1080")
-        options.add_argument('--blink-settings=imagesEnabled=false')    
-        options.binary_location = "/opt/chrome/chrome-linux64/chrome" # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
-        service = Service(executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver")
-        
-        driver = webdriver.Chrome(
-            service=service, # 로컬 실행 시 주석 처리
-            options=options) 
-        
+        service = Service(
+            executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver",
+            service_log_path="/tmp/chromedriver.log"
+        )
+        driver = Chrome(
+            service=service, # 도커 환경에서 사용시 주석 해제하세요.
+            options=chrome_options
+        )
         if driver:
             print("✅ Driver Successfully Set.")
             return driver
@@ -476,8 +486,9 @@ class DC_crawler:
         
     def run_crawl(self,):
         # 드라이버 세팅
-        driver=self._get_driver()
-        logger.info("✅ Driver Successfully Set.")
+        if not (driver:=self.get_driver()):
+            print("🟥 Check Driver 🟥")
+            exit(0)
         
         for url in self.search_url:
             # 검색 기간 내 가장 최신 게시글 검색 결과 접근
