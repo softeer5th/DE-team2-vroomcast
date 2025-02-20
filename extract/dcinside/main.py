@@ -10,7 +10,7 @@ from dateutil import parser
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 import time, json, logging, requests, os
 from bs4 import BeautifulSoup
-import boto3, random
+import boto3, random, pprint
 
 logging.basicConfig(level=logging.INFO)  # 로그 레벨 설정
 logger = logging.getLogger(__name__)
@@ -539,8 +539,9 @@ def lambda_handler(event, context):
     # car_keyword는 lambda_handler에서 event로 처리하게 할 것
     crawler = DC_crawler(s_date, e_date, car_id=car_id, car_keyword=car_keyword, bucket_name=BUCKET_NAME, batch=batch, folder_date=date)
     
-    print("Running crawler")
-    logger.info("Running crawler")
+    print("▶ Running crawler...")
+    logger.info("▶ Running crawler...")
+    
     try:
         crawler.run_crawl()
         logger.info("✅ Crawling Finished")
@@ -569,7 +570,7 @@ def lambda_handler(event, context):
         return {
             "statusCode": 500,
             "body": {
-                "success": True,
+                "success": False,
                 "end_time": convert_date_format(datetime.now().strftime("%y-%m-%d %H:%M:%S")),
                 "duration": delta,
                 "car_id": car_id,
@@ -579,4 +580,14 @@ def lambda_handler(event, context):
                 "end_datetime": e_date
                 }
         }  
-    
+if __name__ == "__main__":
+    event = {
+    'bucket': "vroomcast-s3",
+    'car_id': "test-github",
+    'keywords': ['캐스퍼'],
+    'date': "2025-02-10",
+    'batch': 3,  
+    'start_datetime': "2024-02-14",
+    'end_datetime':"2024-02-11"
+    }
+    pprint.pprint(lambda_handler(event=event, context=None))

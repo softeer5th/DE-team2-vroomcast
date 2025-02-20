@@ -447,6 +447,7 @@ class DC_crawler:
         logger.info("✅ Driver Successfully Set.")
         
         for url in self.search_url:
+            print(f"URL with Search Keyword: {url}")
             # 검색 기간 내 가장 최신 게시글 검색 결과 접근
             end_point = self.get_entry_point(driver, url=url)
             logger.info("✅ Successfully accessed to init date")
