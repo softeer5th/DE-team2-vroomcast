@@ -76,6 +76,7 @@ jobs:
           --code ImageUri=$IMAGE_URI_WITH_DIGEST \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
           --timeout 180 \
+          --memory-size 2048 \ 
           --region ap-northeast-2
 
     - name: Wait for Lambda to be Active
