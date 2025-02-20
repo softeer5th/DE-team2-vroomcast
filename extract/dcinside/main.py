@@ -82,6 +82,46 @@ def is_time_in_range(time_str, start_time, end_time):
     else: return "UNDER"
 
     # return start_time <= input_time <= end_time  
+
+def get_driver():
+    chrome_options = ChromeOptions()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-dev-tools")
+    chrome_options.add_argument("--no-zygote")
+    chrome_options.add_argument("--single-process")
+    # chrome_options.add_argument(f"--user-data-dir={mkdtemp()}")
+    # chrome_options.add_argument(f"--data-path={mkdtemp()}")
+    # chrome_options.add_argument(f"--disk-cache-dir={mkdtemp()}")
+    # chrome_options.add_argument("--remote-debugging-pipe")
+    chrome_options.add_argument("--verbose")
+    # chrome_options.add_argument("--log-path=/tmp")
+    chrome_options.binary_location = "/opt/chrome/chrome-linux64/chrome"
+    # prefs = {
+    #     "profile.managed_default_content_settings.images": 2,  # 이미지 비활성화
+    #     "profile.managed_default_content_settings.ads": 2,     # 광고 비활성화
+    #     "profile.managed_default_content_settings.media": 2    # 비디오, 오디오 비활성화
+    # }
+    # chrome_options.add_experimental_option("prefs", prefs)
+
+    service = Service(
+        executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver",
+        # service_log_path="/tmp/chromedriver.log"
+    )
+    driver = Chrome(
+        service=service, # 도커 환경에서 사용시 주석 해제하세요.
+        options=chrome_options
+    )
+
+    return driver
+    # if driver:
+    #     print("✅ Driver Successfully Set.")
+    #     return driver
+    # else:
+    #     print("❌ Driver Setting Failed.")
+    #     return False    
     
 class DC_crawler:
     MAX_TRY = 2
@@ -102,43 +142,7 @@ class DC_crawler:
         self.s3 = boto3.client("s3")
         
     # Chrome WebDriver 선언, Lambda 적용 시 주석 필히 보고 해제할 것!!!!!
-    def get_driver():
-        chrome_options = ChromeOptions()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-dev-tools")
-        # chrome_options.add_argument("--no-zygote")
-        chrome_options.add_argument("--single-process")
-        # chrome_options.add_argument(f"--user-data-dir={mkdtemp()}")
-        # chrome_options.add_argument(f"--data-path={mkdtemp()}")
-        # chrome_options.add_argument(f"--disk-cache-dir={mkdtemp()}")
-        # chrome_options.add_argument("--remote-debugging-pipe")
-        # chrome_options.add_argument("--verbose")
-        # chrome_options.add_argument("--log-path=/tmp")
-        chrome_options.binary_location = "/opt/chrome/chrome-linux64/chrome"
-        # prefs = {
-        #     "profile.managed_default_content_settings.images": 2,  # 이미지 비활성화
-        #     "profile.managed_default_content_settings.ads": 2,     # 광고 비활성화
-        #     "profile.managed_default_content_settings.media": 2    # 비디오, 오디오 비활성화
-        # }
-        # chrome_options.add_experimental_option("prefs", prefs)
 
-        service = Service(
-            executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver",
-            # service_log_path="/tmp/chromedriver.log"
-        )
-        driver = Chrome(
-            service=service, # 도커 환경에서 사용시 주석 해제하세요.
-            options=chrome_options
-        )
-        if driver:
-            print("✅ Driver Successfully Set.")
-            return driver
-        else:
-            print("❌ Driver Setting Failed.")
-            return False
     
     def get_entry_point(self, driver:webdriver.Chrome, url):
         s_date = self.start_date
@@ -486,14 +490,15 @@ class DC_crawler:
         
     def run_crawl(self,):
         # 드라이버 세팅
-        # try:
-        driver = self.get_driver()
-        # except:
-        #     print("🟥 Check Driver 🟥")
-        #     exit(0)
-        if driver == False: 
+        
+        try:
+            driver = get_driver()
+        except:
             print("🟥 Check Driver 🟥")
             exit(0)
+        # if driver == False: 
+        #     print("🟥 Check Driver 🟥")
+        #     exit(0)
         for url in self.search_url:
             # 검색 기간 내 가장 최신 게시글 검색 결과 접근
             end_point = self.get_entry_point(driver, url=url)
