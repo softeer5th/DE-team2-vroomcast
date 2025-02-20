@@ -19,7 +19,7 @@ COPY driver_test.py ./
 # COPY crawler/ ./crawler/
 
 # Command to run the Lambda function
-CMD [ "lambda_function.lambda_handler" ]
+CMD [ "main.lambda_handler" ]
 #=============================================================================
 # # AWS Lambda Python 3.11 이미지 사용
 # FROM amazon/aws-lambda-python:3.11
