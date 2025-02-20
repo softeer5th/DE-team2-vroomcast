@@ -197,11 +197,10 @@ def regex_replace_privacy(df):
 def transform_static_data(post_df, comment_df):
     post_df = regex_replace_privacy(post_df)
     comment_df = regex_replace_privacy(comment_df)
-    pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")
-    pre_sentence_df = pre_sentence_df.union(
-        comment_df.selectExpr("id AS source_id", "CAST(NULL AS STRING) AS title", "content", "created_at")
-    )
-    sentence_df = pre_sentence_df.withColumn(
+    post_pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")
+    comment_pre_sentence_df = comment_df.selectExpr("id AS source_id", "CAST(NULL AS STRING) AS title", "content", "created_at")
+
+    post_sentence_df = post_pre_sentence_df.withColumn(
         "sentences",
         explode(
             get_sentences(
@@ -210,8 +209,16 @@ def transform_static_data(post_df, comment_df):
         )
     ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
                  "sentences.sentence AS sentence", "created_at")
-    sentence_df = sentence_df.repartition(10)
-    sentence_df.cache()
+    comment_sentence_df = comment_pre_sentence_df.withColumn(
+        "sentences",
+        explode(
+            get_sentences(
+                col("source_id"), col("title"), col("content")
+            )
+        )
+    ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
+                 "sentences.sentence AS sentence", "created_at")
+    sentence_df = post_sentence_df.union(comment_sentence_df)
     sentence_df_with_keywords = sentence_df.withColumn(
         "sentiment_category_keyword",
         extract_sentiment_category_keyword(col("sentence"))
