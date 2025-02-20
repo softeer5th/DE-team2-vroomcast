@@ -1,7 +1,12 @@
 from airflow.providers.amazon.aws.operators.emr import (
-    EmrCreateJobFlowOperator, EmrTerminateJobFlowOperator)
+    EmrCreateJobFlowOperator,
+    EmrTerminateJobFlowOperator,
+)
 from airflow.providers.amazon.aws.sensors.emr import EmrJobFlowSensor
-from modules.constants import S3_BUCKET, S3_CONFIG_BUCKET
+from airflow.utils.context import Context
+from modules.constants import CARS, S3_BUCKET, S3_CONFIG_BUCKET
+from utils.time import pull_time_info
+from utils.xcom import pull_from_xcom
 
 # EMR 클러스터 설정을 위한 상수
 EMR_CONFIG = {
@@ -21,7 +26,7 @@ EMR_CONFIG = {
 
 
 # Jinja 템플릿을 사용한 EMR 클러스터 설정
-def get_emr_job_flow_overrides(date: str, batch: int):
+def get_emr_job_flow_overrides(date: str, batch: int, prev_date: str, prev_batch: int):
     return {
         "Name": "mainTransformCluster",
         "LogUri": "{{ var.value.emr_base_log_uri }}/{{ ts_nodash }}/",
@@ -63,7 +68,7 @@ def get_emr_job_flow_overrides(date: str, batch: int):
         },
         "Steps": [
             {
-                "Name": "Run Spark Job",
+                "Name": "Run Transform Static Spark Job",
                 "ActionOnFailure": "CONTINUE",
                 "HadoopJarStep": {
                     "Jar": "command-runner.jar",
@@ -71,30 +76,80 @@ def get_emr_job_flow_overrides(date: str, batch: int):
                         "spark-submit",
                         "--deploy-mode",
                         "cluster",
-                        "--conf",
-                        "spark.executorEnv.OPENAI_API_KEY={{ var.value.emr_openai_api_key }}",
-                        "--conf",
-                        "spark.driver.extraJavaOptions=-DOPENAI_API_KEY={{ var.value.emr_openai_api_key }}",
-                        f"s3://{S3_CONFIG_BUCKET}/" + "{{ var.value.emr_script_path }}",
+                        f"s3://{S3_CONFIG_BUCKET}/"
+                        + "{{ var.value.emr_static_script_path }}",
                         "--bucket",
                         f"{S3_BUCKET}",
                         "--input_post_paths",
-                        f"combined/*/{date}/{batch}/*/post*.parquet",
+                        f"combined/*/{date}/{batch}/static/post*.parquet",
                         "--input_comment_paths",
-                        f"combined/*/{date}/{batch}/*/comment*.parquet",
+                        f"combined/*/{date}/{batch}/static/comment*.parquet",
                         "--output_dir",
                         f"transformed/{date}/{batch}/",
                     ],
                 },
-            }
+            },
+            {
+                "Name": "Run Transform Dynamic Spark Job",
+                "ActionOnFailure": "CONTINUE",
+                "HadoopJarStep": {
+                    "Jar": "command-runner.jar",
+                    "Args": [
+                        "spark-submit",
+                        "--deploy-mode",
+                        "cluster",
+                        f"s3://{S3_CONFIG_BUCKET}/"
+                        + "{{ var.value.emr_dynamic_script_path }}",
+                        "--bucket",
+                        f"{S3_BUCKET}",
+                        "--before_dynamic_posts",
+                        *[
+                            f"combined/{car_id}/{prev_date}/{prev_batch}/dynamic/post_*.parquet"
+                            for car_id in CARS
+                        ],
+                        "--after_dynamic_posts",
+                        *[
+                            f"combined/{car_id}/{date}/{batch}/dynamic/post_*.parquet"
+                            for car_id in CARS
+                        ],
+                        "--before_dynamic_comments",
+                        *[
+                            f"combined/{car_id}/{prev_date}/{prev_batch}/dynamic/comment_*.parquet"
+                            for car_id in CARS
+                        ],
+                        "--after_dynamic_comments",
+                        *[
+                            f"combined/{car_id}/{date}/{batch}/dynamic/comment_*.parquet"
+                            for car_id in CARS
+                        ],
+                    ],
+                },
+            },
         ],
     }
 
 
-def create_execute_emr_task(dag, date: str, batch: int):
-    return EmrCreateJobFlowOperator(
+class CustomEmrCreateJobFlowOperator(EmrCreateJobFlowOperator):
+    def execute(self, context: Context) -> str:
+        prev_batch_info = pull_from_xcom("synchronize_task", "prev_batch_info", **context)
+        current_batch_info = pull_time_info(**context)
+
+        date = current_batch_info["date"]
+        batch = current_batch_info["batch"]
+
+        prev_date = prev_batch_info["date"]
+        prev_batch = prev_batch_info["batch"]
+
+        self.job_flow_overrides = get_emr_job_flow_overrides(
+            date, batch, prev_date, prev_batch
+        )
+
+        return super().execute(context)
+
+
+def create_execute_emr_task(dag):
+    return CustomEmrCreateJobFlowOperator(
         task_id="create_emr_cluster",
-        job_flow_overrides=get_emr_job_flow_overrides(date, batch),
         dag=dag,
     )
 

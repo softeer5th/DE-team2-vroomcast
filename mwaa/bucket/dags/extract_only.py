@@ -5,10 +5,8 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.models import Variable
-from airflow.models.baseoperator import cross_downstream
 from airflow.utils.trigger_rule import TriggerRule
 from modules.aggregator import create_aggregate_task
-from modules.analyzer import create_analyze_sentiment_task
 from modules.combiner import create_combine_task
 from modules.constants import (
     BATCH_DURATION_HOURS,
@@ -17,23 +15,7 @@ from modules.constants import (
     COMMUNITIES,
 )
 from modules.extractor import create_extract_task
-from modules.loader import (
-    create_load_dynamic_to_redshift_tasks,
-    create_load_post_car_to_redshift_tasks,
-    create_load_static_to_redshift_tasks,
-)
-from modules.notificator import (
-    create_notificate_all_done_task,
-    create_notificate_extract_task,
-)
-from modules.synchronizer import create_synchronize_task
-from modules.transformer import (
-    create_check_emr_termination_task,
-    create_execute_emr_task,
-    create_terminate_emr_cluster_task,
-)
 from pendulum import timezone
-from utils.time import create_push_time_task
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +31,14 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-KST = timezone("Asia/Seoul")
-
 with DAG(
-    "vroomcast_workflow",
+    "extract_only",
     default_args=default_args,
     description="Data pipeline workflow for Vroomcast",
     schedule_interval=timedelta(minutes=BATCH_INTERVAL_MINUTES),
     catchup=False,
+    # max_active_runs=1,
     user_defined_macros={"BATCH_DURATION_HOURS": BATCH_DURATION_HOURS},
-    max_active_runs=1,  # 한번에 하나의 DAG 인스턴스만 실행
 ) as dag:
     logger.info("=== Starting DAG Task Creation ===")
 
@@ -80,11 +60,8 @@ with DAG(
     # 하루의 시작(00:00)부터 몇 분이 지났는지
     batch = "{{ (execution_date.in_timezone('Asia/Seoul').hour * 60) + execution_date.in_timezone('Asia/Seoul').minute }}"
 
-    push_time_task = create_push_time_task(dag, ref_date, ref_time, batch)
-
-    synchronize_task = create_synchronize_task(dag, "batch.json")
-
     extract_tasks = []
+    monitor_extract_tasks = []
     combine_tasks = []
 
     # 각 차종에 대해 Extract 태스크와 Combine 태스크 생성
@@ -115,7 +92,7 @@ with DAG(
         combine_task.trigger_rule = TriggerRule.ALL_DONE
         logger.info(f"Setting dependencies for combine task: {combine_task.task_id}")
 
-        # Extract >> Combine
+        # Validate 태스크들과 Combine 태스크 간의 dependency 설정
         car_extract_tasks >> combine_task
 
         extract_tasks.extend(car_extract_tasks)
@@ -123,52 +100,8 @@ with DAG(
 
         logger.info(f"Completed task creation for {car_id}")
 
-    push_time_task >> synchronize_task >> extract_tasks
-
     # Aggregate 태스크 생성
     aggregate_task = create_aggregate_task(dag)
     aggregate_task.trigger_rule = TriggerRule.ALL_DONE
 
-    # Notificate 태스크 생성
-    notificate_extract_task = create_notificate_extract_task(dag)
-
-    # Extract >> Aggregate >> Notificate
-    extract_tasks >> aggregate_task >> notificate_extract_task
-
-    execute_emr_task = create_execute_emr_task(dag)
-    check_emr_termination_task = create_check_emr_termination_task(dag)
-    terminate_emr_cluster_task = create_terminate_emr_cluster_task(dag)
-
-    # Combine >> Execute EMR >> Check EMR Termination >> Terminate EMR
-    (
-        combine_tasks
-        >> execute_emr_task
-        >> check_emr_termination_task
-        >> terminate_emr_cluster_task
-    )
-
-    analyze_sentiment_task = create_analyze_sentiment_task(dag, ref_date, batch)
-
-    load_dynamic_toredshift_tasks = create_load_dynamic_to_redshift_tasks(
-        dag, ref_date, batch
-    )
-    load_post_car_to_redshift_tasks = create_load_post_car_to_redshift_tasks(
-        dag, ref_date, batch
-    )
-    load_transformed_to_redshift_tasks = create_load_static_to_redshift_tasks(
-        dag, ref_date, batch
-    )
-
-    notificate_all_done_task = create_notificate_all_done_task(dag)
-
-    (
-        terminate_emr_cluster_task
-        >> analyze_sentiment_task
-        >> load_transformed_to_redshift_tasks
-    )
-
-    cross_downstream(load_transformed_to_redshift_tasks, load_dynamic_toredshift_tasks)
-
-    cross_downstream(load_dynamic_toredshift_tasks, load_post_car_to_redshift_tasks)
-
-    load_post_car_to_redshift_tasks >> notificate_all_done_task
+    extract_tasks >> aggregate_task

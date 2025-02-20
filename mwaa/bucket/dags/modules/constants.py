@@ -1,5 +1,6 @@
 import json
 import os
+from dataclasses import dataclass
 
 from airflow.models import Variable
 
@@ -10,8 +11,10 @@ S3_CONFIG_BUCKET = Variable.get("S3_CONFIG_BUCKET")
 BATCH_INTERVAL_MINUTES = int(Variable.get("BATCH_INTERVAL_MINUTES"))
 BATCH_DURATION_HOURS = int(Variable.get("BATCH_DURATION_HOURS"))
 
+SLACK_WEBHOOK_URL = Variable.get("SLACK_WEBHOOK_URL")
+
 # 설정 파일 경로
-CONFIG_PATH = os.path.join(os.getenv("AIRFLOW_HOME"), "configs")
+CONFIG_PATH = os.path.join(os.getenv("AIRFLOW_HOME"), "dags/configs")
 
 
 def _load_config(filename: str) -> dict | list:
@@ -33,3 +36,35 @@ def _load_config(filename: str) -> dict | list:
 # 설정 파일 로드
 CARS = {item["car_id"]: item["keywords"] for item in _load_config("car.json")}
 COMMUNITIES = _load_config("community.json")
+
+
+@dataclass
+class TableMapping:
+    parquet: str
+    table: str
+    keys: list[str]
+
+
+STATIC_PATH = "transformed/{date}/{batch}/{parquet}"
+
+STATIC_MAPPINGS = [
+    TableMapping("post_static/", "post_static", []),
+    TableMapping("comment_static/", "comment_static", []),
+    TableMapping("sentence_sentiment/", "sentence", []),
+    TableMapping("keyword_category/", "keyword_category", []),
+]
+
+POST_CAR_PATH = "combined/{car_id}/{date}/{batch}/post_car.parquet"
+
+POST_CAR_MAPPING = TableMapping("post_car", "post_car", ["post_id", "car_id"])
+
+DYNAMIC_PATH = "combined/{car_id}/{date}/{batch}/dynamic/{parquet}"
+
+DYNAMIC_MAPPINGS = [
+    TableMapping("post", "post_dynamic", ["id", "extracted_at"]),
+    TableMapping("comment", "comment_dynamic", ["id", "extracted_at"]),
+    TableMapping("vector_dynamic_post/", "v_post_dynamic", ["id", "extracted_at"]),
+    TableMapping(
+        "vector_dynamic_comment/", "v_comment_dynamic", ["id", "extracted_at"]
+    ),
+]

@@ -1,15 +1,18 @@
 import json
 
 from airflow import DAG
-from airflow.providers.amazon.aws.operators.lambda_function import \
-    LambdaInvokeFunctionOperator
+from airflow.providers.amazon.aws.operators.lambda_function import (
+    LambdaInvokeFunctionOperator,
+)
 from modules.constants import S3_BUCKET
 
 
 def create_combine_task(
     dag: DAG, car_id: str, date: str, batch: int, batch_datetime: str
 ) -> LambdaInvokeFunctionOperator:
-    """Combine 태스크를 생성하는 함수"""
+    """
+    Combine Lambda를 호출하는 Task를 생성합니다.
+    """
     return LambdaInvokeFunctionOperator(
         task_id=f"combine_{car_id}",
         function_name=f"vroomcast-lambda-combine",
