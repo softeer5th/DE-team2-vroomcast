@@ -486,7 +486,9 @@ class DC_crawler:
         
     def run_crawl(self,):
         # 드라이버 세팅
-        if not (driver:=self.get_driver()):
+        try:
+            driver = self.get_driver()
+        except:
             print("🟥 Check Driver 🟥")
             exit(0)
         
