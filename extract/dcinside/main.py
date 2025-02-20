@@ -562,7 +562,7 @@ def lambda_handler(event, context):
                 "end_datetime": e_date
                 }
         }        
-    except:
+    except Exception as e:
         logger.info("❌ Crawling Not Finished With Errors")
         print("❌ Crawling Not Finished With Errors")
         finished_time = time.time()
@@ -577,17 +577,18 @@ def lambda_handler(event, context):
                 "date": date,
                 "batch": batch,
                 "start_datetime": s_date,
-                "end_datetime": e_date
+                "end_datetime": e_date,
+                "Error": e
                 }
         }  
-if __name__ == "__main__":
-    event = {
-    'bucket': "vroomcast-s3",
-    'car_id': "test-github",
-    'keywords': ['캐스퍼'],
-    'date': "2025-02-10",
-    'batch': 3,  
-    'start_datetime': "2024-02-14",
-    'end_datetime':"2024-02-11"
-    }
-    pprint.pprint(lambda_handler(event=event, context=None))
+# if __name__ == "__main__":
+#     event = {
+#     'bucket': "vroomcast-s3",
+#     'car_id': "test-github",
+#     'keywords': ['캐스퍼'],
+#     'date': "2025-02-10",
+#     'batch': 3,  
+#     'start_datetime': "2024-02-14",
+#     'end_datetime':"2024-02-11"
+#     }
+#     pprint.pprint(lambda_handler(event=event, context=None))
