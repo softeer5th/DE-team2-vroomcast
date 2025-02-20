@@ -23,6 +23,8 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Configure AWS Credentials using OIDC
       uses: aws-actions/configure-aws-credentials@v2
@@ -42,7 +44,7 @@ jobs:
         IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME:latest"
 
         echo "Building & Deploying Test Lambda: $TEST_LAMBDA_NAME"
-        docker build -t vroomcast/$TEST_LAMBDA_NAME $TARGET_DIR
+        docker build --no-cache -t vroomcast/$TEST_LAMBDA_NAME $TARGET_DIR
         docker tag vroomcast/$TEST_LAMBDA_NAME:latest $IMAGE_URI
         docker push $IMAGE_URI
         
@@ -66,16 +68,14 @@ jobs:
         IMAGE_URI_WITH_DIGEST="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME@${LOCAL_DIGEST}"
     
         echo "Creating or Updating Test Lambda: $TEST_LAMBDA_NAME"
+        echo "Delete and Update Test Lambda: $TEST_LAMBDA_NAME"
+        aws lambda delete-function --function-name $TEST_LAMBDA_NAME --region ap-northeast-2 || echo "No existing function to delete"
         aws lambda create-function \
           --function-name $TEST_LAMBDA_NAME \
           --package-type Image \
           --code ImageUri=$IMAGE_URI_WITH_DIGEST \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
           --timeout 180 \
-          --region ap-northeast-2 || \
-        aws lambda update-function-code \
-          --function-name $TEST_LAMBDA_NAME \
-          --image-uri $IMAGE_URI_WITH_DIGEST \
           --region ap-northeast-2
 
     - name: Wait for Lambda to be Active
