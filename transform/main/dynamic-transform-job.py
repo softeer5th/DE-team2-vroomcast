@@ -3,6 +3,7 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 import logging
 import argparse
+import os
 
 def diff_dynamic_post(prev_dynamic_post_df, post_dynamic_post_df):
     # Outer join on 'id'
@@ -13,6 +14,7 @@ def diff_dynamic_post(prev_dynamic_post_df, post_dynamic_post_df):
     # 공통 컬럼 리스트 (id 제외)
     common_columns = list(set(prev_dynamic_post_df.columns) & set(post_dynamic_post_df.columns))
     common_columns.remove("id")  # id는 제외
+    common_columns.remove("extracted_at")
 
     # 차이 계산 (left 값이 없으면 right 값 그대로 사용)
     diff_columns = [
@@ -26,7 +28,7 @@ def diff_dynamic_post(prev_dynamic_post_df, post_dynamic_post_df):
     filtered_df = joined_df.filter(col("right.id").isNotNull())
 
     # 최종 결과
-    result_df = filtered_df.select("id", *diff_columns)
+    result_df = filtered_df.select("id", col("right.extracted_at").alias("extracted_at"), *diff_columns)
 
     return result_df
 
@@ -34,24 +36,36 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument('--bucket', help='S3 bucket name')
-    parser.add_argument('--input_prev_dynamic_post', nargs='+', help='Input parquet file paths')
-    parser.add_argument('--input_post_dynamic_post', nargs='+', help='Input parquet file paths')
-    parser.add_argument('--input_prev_dynamic_comment', nargs='+', help='Input parquet file paths')
-    parser.add_argument('--input_post_dynamic_comment', nargs='+', help='Input parquet file paths')
+    parser.add_argument('--prev_dynamic_posts', nargs='+', help='Input parquet file paths')
+    parser.add_argument('--post_dynamic_posts', nargs='+', help='Input parquet file paths')
+    parser.add_argument('--prev_dynamic_comments', nargs='+', help='Input parquet file paths')
+    parser.add_argument('--post_dynamic_comments', nargs='+', help='Input parquet file paths')
     parser.add_argument('--output_dir', help='Output path')
-    spark = SparkSession.builder.appName("DynamicTransformJob").getOrCreate()
+    # spark = SparkSession.builder.appName("DynamicTransformJob").getOrCreate()
+    spark = SparkSession.builder \
+        .appName("DynamicTransformJob") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
+        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
+        .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
+        .getOrCreate()
     args = parser.parse_args()
     bucket = args.bucket
-    input_prev_dynamic_post = args.input_prev_dynamic_post
-    input_post_dynamic_post = args.input_post_dynamic_post
-    input_prev_dynamic_comment = args.input_prev_dynamic_comment
-    input_post_dynamic_comment = args.input_post_dynamic_comment
+    prev_dynamic_posts = args.prev_dynamic_posts
+    post_dynamic_posts = args.post_dynamic_posts
+    prev_dynamic_comments = args.prev_dynamic_comments
+    post_dynamic_comments = args.post_dynamic_comments
     output_dir = args.output_dir
-    prev_dynamic_post_df = spark.read.parquet(input_prev_dynamic_post)
-    prev_dynamic_comment_df = spark.read.parquet(input_prev_dynamic_comment)
-    post_dynamic_post_df = spark.read.parquet(input_post_dynamic_post)
-    post_dynamic_comment_df = spark.read.parquet(input_post_dynamic_comment)
+    mode = "s3a://"
+    s3_prev_dynamic_posts = [f"{mode}{bucket}/{prev_dynamic_post}" for prev_dynamic_post in prev_dynamic_posts]
+    s3_prev_dynamic_comments = [f"{mode}{bucket}/{prev_dynamic_comment}" for prev_dynamic_comment in prev_dynamic_comments]
+    s3_post_dynamic_posts = [f"{mode}{bucket}/{post_dynamic_post}" for post_dynamic_post in post_dynamic_posts]
+    s3_post_dynamic_comments = [f"{mode}{bucket}/{post_dynamic_comment}" for post_dynamic_comment in post_dynamic_comments]
+    prev_dynamic_post_df = spark.read.parquet(*s3_prev_dynamic_posts)
+    post_dynamic_post_df = spark.read.parquet(*s3_post_dynamic_posts)
+    prev_dynamic_comment_df = spark.read.parquet(*s3_prev_dynamic_comments)
+    post_dynamic_comment_df = spark.read.parquet(*s3_post_dynamic_comments)
     diff_dynamic_post_df = diff_dynamic_post(prev_dynamic_post_df, post_dynamic_post_df)
     diff_dynamic_comment_df = diff_dynamic_post(prev_dynamic_comment_df, post_dynamic_comment_df)
-    diff_dynamic_post_df.write.parquet(f"s3://{bucket}/{output_dir}/diff_dynamic_post")
-    diff_dynamic_comment_df.write.parquet(f"s3://{bucket}/{output_dir}/diff_dynamic_comment")
+    diff_dynamic_post_df.write.mode("overwrite").parquet(f"s3a://{bucket}/{output_dir}/diff_dynamic_post")
+    diff_dynamic_comment_df.write.mode("overwrite").parquet(f"s3a://{bucket}/{output_dir}/diff_dynamic_comment")
