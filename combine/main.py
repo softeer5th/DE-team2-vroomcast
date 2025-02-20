@@ -153,7 +153,7 @@ def _split_data(data: dict, batch_datetime: str) -> tuple[dict, list[dict]]:
             "id": comment_id,
             "post_id": post_id,
             "content": comment["content"],
-            "is_reply": comment["is_reply"],
+            "is_reply": bool(comment["is_reply"]),
             "created_at": _parse_datetime(comment["created_at"]),
         }
 
@@ -197,6 +197,11 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
             )
         except Exception as e:
             logger.error(f"Error uploading data: {str(e)}")
+            logger.info(f"")
+            return
+        
+        for item in data:
+            id_set.add(item["id"])
 
     chunk_idx = 0
     chunk_size = 200
@@ -216,13 +221,11 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
 
             if post["post_static"]["id"] not in id_set:
                 post_statics.append(post["post_static"])
-                id_set.add(post["post_static"]["id"])
             post_dynamics.append(post["post_dynamic"])
 
             for comment in comments:
                 if comment["comment_static"]["id"] not in id_set:
                     comment_statics.append(comment["comment_static"])
-                    id_set.add(comment["comment_static"]["id"])
                 comment_dynamics.append(comment["comment_dynamic"])
 
         logger.info(f"Uploading chunk {chunk_idx} for car_id: {car_id}, date: {date}")
