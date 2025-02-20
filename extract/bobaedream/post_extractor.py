@@ -5,17 +5,21 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def _fetch_post(url: str) -> str:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "ko-KR,ko;q=0.8,en-US;q=0.5,en;q=0.3",
-        "Referer": "https://www.bobaedream.co.kr/search",
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    response.encoding = "utf-8"
-    return response.text
+def _fetch_post(url: str) -> str | None:
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.8,en-US;q=0.5,en;q=0.3",
+            "Referer": "https://www.bobaedream.co.kr/search",
+        }
+        response = requests.get(url, headers=headers, timeout=(3, 10))
+        response.raise_for_status()
+        response.encoding = "utf-8"
+        return response.text
+    except Exception as e:
+        print(f"Error fetching post: {e}")
+        return None
 
 
 def _get_soup(html: str) -> BeautifulSoup:
@@ -200,7 +204,11 @@ def _parse_post(soup: BeautifulSoup, url: str, id: str, start_datetime: str, end
     }
 
 
-def extract_post(url: str, id: str, start_datetime: str, end_datetime: str) -> dict[str, str | int]:
+def extract_post(url: str, id: str, start_datetime: str, end_datetime: str) -> tuple[dict[str, str | int], bool]:
     html = _fetch_post(url)
+
+    if not html:
+        return None, False
+
     soup = _get_soup(html)
-    return _parse_post(soup, url, id, start_datetime, end_datetime)
+    return _parse_post(soup, url, id, start_datetime, end_datetime), True
