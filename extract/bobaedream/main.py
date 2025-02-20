@@ -42,6 +42,7 @@ def _extract(bucket: str, car_id: str, keyword: str, date: str, batch: int, star
         )
         _save_to_s3(post, bucket, s3_key)
         logger.info(f"Saved to S3: {s3_key}")
+        logger.info(f"Post ID and Date {post['post_id']}, {post['created_at']}")
 
 
 def lambda_handler(event, context):
@@ -56,7 +57,7 @@ def lambda_handler(event, context):
         start_datetime = event.get("start_datetime")
         end_datetime = event.get("end_datetime")
 
-        if not all([bucket, car_id, keywords, date, batch, start_datetime, end_datetime]):
+        if any(param is None for param in [bucket, car_id, keywords, date, batch, start_datetime, end_datetime]):
             raise ValueError("Missing required fields")
 
         for keyword in keywords:
@@ -94,5 +95,6 @@ def lambda_handler(event, context):
                 "batch": batch,
                 "start_datetime": start_datetime,
                 "end_datetime": end_datetime,
+                "error": str(e),
             },
         }
