@@ -2,7 +2,7 @@ from selenium import webdriver
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from tempfile import mkdtemp
+# from tempfile import mkdtemp
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -111,7 +111,7 @@ class DC_crawler:
         chrome_options.add_argument("--disable-dev-tools")
         # chrome_options.add_argument("--no-zygote")
         chrome_options.add_argument("--single-process")
-        chrome_options.add_argument(f"--user-data-dir={mkdtemp()}")
+        # chrome_options.add_argument(f"--user-data-dir={mkdtemp()}")
         # chrome_options.add_argument(f"--data-path={mkdtemp()}")
         # chrome_options.add_argument(f"--disk-cache-dir={mkdtemp()}")
         # chrome_options.add_argument("--remote-debugging-pipe")
@@ -486,12 +486,14 @@ class DC_crawler:
         
     def run_crawl(self,):
         # 드라이버 세팅
-        try:
-            driver = self.get_driver()
-        except:
+        # try:
+        driver = self.get_driver()
+        # except:
+        #     print("🟥 Check Driver 🟥")
+        #     exit(0)
+        if driver == False: 
             print("🟥 Check Driver 🟥")
             exit(0)
-        
         for url in self.search_url:
             # 검색 기간 내 가장 최신 게시글 검색 결과 접근
             end_point = self.get_entry_point(driver, url=url)

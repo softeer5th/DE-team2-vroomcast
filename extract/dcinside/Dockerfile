@@ -17,7 +17,9 @@ RUN pip install selenium boto3 pandas bs4 python-dotenv
 # Copy the main application code
 COPY driver_test.py ./
 COPY main.py ./
-
+# # AWS Lambda Python 핸들러 지정 (파일 이름.함수 이름)
+# CMD ["main.lambda_handler"]
+CMD ["driver_test.lambda_handler"]
 # COPY crawler/ ./crawler/
 
 # Command to run the Lambda function
@@ -81,5 +83,3 @@ COPY main.py ./
 # COPY driver_test.py /var/task
 
 
-# # AWS Lambda Python 핸들러 지정 (파일 이름.함수 이름)
-CMD ["main.lambda_handler"]
