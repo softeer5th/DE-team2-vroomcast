@@ -22,18 +22,6 @@ WAIT_TIME = 2
 # 제목만 / 제목+내용
 SEARCH_URL_TITLE = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=search_subject&s_keyword="
 SEARCH_URL_TITLE_AND_CONTENT = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=search_subject_memo&s_keyword="  
-
-# def aws_lambda_logging_ok(log_text):
-#     return {
-#         'statusCode': 200,
-#         'body': log_text#'✅ File uploaded successfully'
-#     }
-    
-# def aws_lambda_logging_fail(log_text):
-#     return {
-#         'statusCode': 500,
-#         'body': log_text#'✅ File uploaded successfully'
-#     }  
     
 def convert_date_format(date_str:str):
     """
@@ -581,14 +569,3 @@ def lambda_handler(event, context):
                 "Error": e
                 }
         }  
-# if __name__ == "__main__":
-#     event = {
-#     'bucket': "vroomcast-s3",
-#     'car_id': "test-github",
-#     'keywords': ['캐스퍼'],
-#     'date': "2025-02-10",
-#     'batch': 3,  
-#     'start_datetime': "2024-02-14",
-#     'end_datetime':"2024-02-11"
-#     }
-#     pprint.pprint(lambda_handler(event=event, context=None))

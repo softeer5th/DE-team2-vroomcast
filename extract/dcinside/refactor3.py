@@ -472,13 +472,13 @@ if __name__=="__main__":
     init_time = time.time()
     
     airflow_json = {
-        "bucket": "s3-bucket-name",
-        "keywords": ['산타페'],
-        "car_id": "santafe",
-        "date": "2024-02-14",
-        "batch": 0,
-        "start_datetime": "2024-02-11T12:30:00",
-        "end_datetime": "2024-02-14T12:30:00"
+	"bucket": "vroomcast-s3",
+	"keywords": ["ev3"],
+	"car_id": "ev3",
+	"date": "2025-02-20",
+	"batch": 0,
+	"start_datetime": "2024-05-07T00:00:00",
+	"end_datetime": "2024-05-30T00:00:00"
     }
     
     s_date = ' '.join(airflow_json['start_datetime'].split('T'))

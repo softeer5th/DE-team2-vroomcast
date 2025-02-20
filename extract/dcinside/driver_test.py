@@ -4,50 +4,46 @@ from selenium.webdriver.chrome.options import Options
 import time
 from bs4 import BeautifulSoup
 from webdriver_manager.chrome import ChromeDriverManager
-def _get_driver():
-    # 이 path는 로컬 실행 시 주석처리 하세요.
-    # chrome_path = "/chrome-headless-shell-mac-arm64"
-    # driver_path = "/chromedriver-mac-arm64"   
+def get_driver():
 
     options = webdriver.ChromeOptions()
     # options.binary_location = chrome_path  # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
-    options.add_argument("--headless")  # Headless 모드
+    options.add_argument("--disable-extensions")
+    options.add_argument("--headless=new")  # Headless 모드
     options.add_argument("--no-sandbox")
-    # options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    # options.add_argument("--disable-dev-tools")
-    # options.add_argument("user-agent=Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)")
-    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0")
+    options.add_argument("--disable-dev-tools")
     options.add_argument("--window-size=1920x1080")
+    # options.add_argument("user-agent=Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)")
+    # options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0Safari/537.36")
+    # options.add_argument("--remote-debugging-port=9222")
     # 아래 두 행은 로컬 실행 시 주석처리
-    # options.binary_location = "/opt/chrome/chrome-linux64/chrome"
-    # service = Service(executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver")
+    # options.binary_location = "/opt/chrome/chrome-headless-shell"
+    options.binary_location = "/opt/chrome/chrome-linux64/chrome"    
+    service = Service(executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver")
+    # service = Service(ChromeDriverManager().install())
     
-    driver = webdriver.Chrome(
-        # service=service, # 로컬 실행 시 주석 처리
+    
+    try:
+        driver = webdriver.Chrome(
+        service=service, # 로컬 실행 시 주석 처리
         options=options) 
+        print("Current session is {}".format(driver.session_id))
+    except Exception as e:
+        print(f"ERROR: {e}")
+        # driver.quit()
     return driver
 
 
 if __name__=="__main__":
     print("Starting Test ...")
-    driver = _get_driver()
+    driver = get_driver()
     print("driver has set.")
     if driver:
-        # driver.get("https://namu.wiki/")
-        # time.sleep(1)
-        # soup = BeautifulSoup(driver.page_source, "html.parser")
-        # door = soup.select_one("span.OXif9nG5").get_text()
-        # print(door)
-        
-        driver.get("https://gall.dcinside.com/board/lists?id=car_new1&search_pos=-10358192&s_type=search_subject&s_keyword=.EC.8B.BC.ED.83.80.ED.8E.98")
-        time.sleep(1)
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        gall_time = soup.select("tr.ub-content.us-post")
-        for post in gall_time:
-            # 날짜 검증
-            date = post.select_one("td.gall_date")['title'] if post.select_one("td.gall_date") else "날짜 없음"        
-            print(date)
+        driver.get("https://www.google.com")
+        print("Page title:", driver.title)
+        driver.quit()        
         
         print("Test Successfully Ended")
         driver.quit()
