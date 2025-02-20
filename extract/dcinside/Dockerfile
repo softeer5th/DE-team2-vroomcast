@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # COPY chromedriver-mac-arm64/chromedriver /opt/chromedriver/
 # COPY chrome-headless-shell-mac-arm64 /opt/chrome/
 # COPY chromedriver-linux64/chromedriver /opt/chromedriver
-COPY chrome-headless-shell-linux64 /opt/chrome/
+# COPY chrome-headless-shell-linux64 /opt/chrome/
 # chrome-headless-shell 폴더 복사
 
 RUN chmod +x /opt/chrome && \
