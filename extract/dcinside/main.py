@@ -9,8 +9,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from datetime import datetime, timedelta
 from dateutil import parser
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-import time, json, logging, requests, os
+# from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+import time, json, logging, os
 from bs4 import BeautifulSoup
 import boto3, random, pprint
 
