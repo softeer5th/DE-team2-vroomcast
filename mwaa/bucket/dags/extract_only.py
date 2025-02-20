@@ -2,25 +2,21 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
+from pendulum import timezone
 
 from airflow import DAG
 from airflow.models import Variable
-from pendulum import timezone
-from modules.notificator import create_notificate_extract_task, create_notificate_all_done_task
 from modules.combiner import create_combine_task
 from modules.constants import (BATCH_DURATION_HOURS, BATCH_INTERVAL_MINUTES,
                                CARS, COMMUNITIES, CONFIG_PATH, S3_BUCKET,
                                TRANSFORMED_TABLES)
-from modules.extractor import create_extract_task   
+from modules.extractor import create_extract_task
 from modules.aggregator import create_aggregate_task
 from modules.transformer import (create_check_emr_termination_task,
                                  create_execute_emr_task,
                                  create_terminate_emr_cluster_task)
 
-from modules.loader import create_load_combined_to_redshift_tasks, create_load_post_car_to_redshift_tasks, create_load_transformed_to_readshift_tasks
-from modules.analyzer import create_analyze_sentiment_task
 from airflow.utils.trigger_rule import TriggerRule
-from airflow.models.baseoperator import cross_downstream
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +32,13 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-KST = timezone('Asia/Seoul')
-
 with DAG(
-    "vroomcast_workflow",
+    "extract_only",
     default_args=default_args,
     description="Data pipeline workflow for Vroomcast",
     schedule_interval=timedelta(minutes=BATCH_INTERVAL_MINUTES),
     catchup=False,
+    # max_active_runs=1,
     user_defined_macros={"BATCH_DURATION_HOURS": BATCH_DURATION_HOURS},
 ) as dag:
     logger.info("=== Starting DAG Task Creation ===")
@@ -63,6 +58,7 @@ with DAG(
     batch = "{{ (execution_date.in_timezone('Asia/Seoul').hour * 60) + execution_date.in_timezone('Asia/Seoul').minute }}"
 
     extract_tasks = []
+    monitor_extract_tasks = []
     combine_tasks = []
 
     # 각 차종에 대해 Extract 태스크와 Combine 태스크 생성
@@ -86,7 +82,7 @@ with DAG(
         combine_task.trigger_rule = TriggerRule.ALL_DONE
         logger.info(f"Setting dependencies for combine task: {combine_task.task_id}")
 
-        # Extract >> Combine
+        # Validate 태스크들과 Combine 태스크 간의 dependency 설정
         car_extract_tasks >> combine_task
 
         extract_tasks.extend(car_extract_tasks)
@@ -98,42 +94,6 @@ with DAG(
     aggregate_task = create_aggregate_task(dag)
     aggregate_task.trigger_rule = TriggerRule.ALL_DONE
 
-    # Notificate 태스크 생성
-    notificate_extract_task = create_notificate_extract_task(dag)
+    extract_tasks >> aggregate_task
 
-    # Extract >> Aggregate >> Notificate
-    extract_tasks >> aggregate_task >> notificate_extract_task
-
-    execute_emr_task = create_execute_emr_task(dag, ref_date, batch)
-    check_emr_termination_task = create_check_emr_termination_task(dag)
-    terminate_emr_cluster_task = create_terminate_emr_cluster_task(dag)
-
-    # Combine >> Execute EMR >> Check EMR Termination >> Terminate EMR
-    (
-        combine_tasks
-        >> execute_emr_task
-        >> check_emr_termination_task
-        >> terminate_emr_cluster_task
-    )
-
-    load_combined_to_redshift_tasks = create_load_combined_to_redshift_tasks(dag, ref_date, batch)
-    load_post_car_to_redshift_tasks = create_load_post_car_to_redshift_tasks(dag, ref_date, batch)
-    load_transformed_to_redshift_tasks = create_load_transformed_to_readshift_tasks(dag, ref_date, batch)
-
-
-    # Combine >> Load Transformed to Redshift
-    cross_downstream(
-        combine_tasks, load_combined_to_redshift_tasks
-    )
-
-    # Combine >> Load Post Car to Redshift
-    cross_downstream(
-        combine_tasks, load_post_car_to_redshift_tasks
-    )
-
-    analyze_sentiment_task = create_analyze_sentiment_task(dag, ref_date, batch)
-
-    notificate_all_done_task = create_notificate_all_done_task(dag, ref_date, batch)
-
-    # Terminate EMR >> Analyze Sentiment >> Load Transformed to Redshift >> Notificate All Done
-    terminate_emr_cluster_task >> analyze_sentiment_task >> load_transformed_to_redshift_tasks >> notificate_all_done_task
+  

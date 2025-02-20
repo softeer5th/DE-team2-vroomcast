@@ -10,8 +10,10 @@ S3_CONFIG_BUCKET = Variable.get("S3_CONFIG_BUCKET")
 BATCH_INTERVAL_MINUTES = int(Variable.get("BATCH_INTERVAL_MINUTES"))
 BATCH_DURATION_HOURS = int(Variable.get("BATCH_DURATION_HOURS"))
 
+SLACK_WEBHOOK_URL = Variable.get("SLACK_WEBHOOK_URL")
+
 # 설정 파일 경로
-CONFIG_PATH = os.path.join(os.getenv("AIRFLOW_HOME"), "configs")
+CONFIG_PATH = os.path.join(os.getenv("AIRFLOW_HOME"), "dags/configs")
 
 
 def _load_config(filename: str) -> dict | list:
@@ -33,3 +35,16 @@ def _load_config(filename: str) -> dict | list:
 # 설정 파일 로드
 CARS = {item["car_id"]: item["keywords"] for item in _load_config("car.json")}
 COMMUNITIES = _load_config("community.json")
+
+TRANSFORMED_TABLES = [
+    "post_static",
+    "comment_static",
+    "sentence",
+    "keyword_category",
+    "post_car",
+]
+
+COMBINED_DYNAMICS = [
+    "post",
+    "comment",
+]
