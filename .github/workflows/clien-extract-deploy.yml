@@ -42,7 +42,7 @@ jobs:
         IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$DEPLOY_IMAGE_NAME:latest"
 
         echo "Building & Deploying Deploy Lambda: $DEPLOY_IMAGE_NAME"
-        docker build -t vroomcast/$DEPLOY_IMAGE_NAME $TARGET_DIR
+        docker build --no-cache -t vroomcast/$DEPLOY_IMAGE_NAME $TARGET_DIR
         docker tag vroomcast/$DEPLOY_IMAGE_NAME:latest $IMAGE_URI
         docker push $IMAGE_URI
 
