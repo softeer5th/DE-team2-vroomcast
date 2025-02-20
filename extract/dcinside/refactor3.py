@@ -456,15 +456,21 @@ class DC_crawler:
             self.page_traveler(driver, end_point)
         
         # 수집된 링크를 방문하며 html 소스 저장
+        fail_count = 0
         for i, post in enumerate(self.post_link):
 
             parsed_source = self.get_html_of_post(driver, post['url'])
             res_json = self.html_parser(driver, post, parsed_source)
             
             logger.info(f"💿 ⏎ Saving...[{i+1} / {len(self.post_link)}]")
-            self.save_json(res_json, post)
+            try:
+                self.save_json(res_json, post)
+            except:
+                fail_count += 1
+                continue
                 
             time.sleep(random.randrange(0, 50) / 100)
+        return fail_count, len(self.post_link)
                     
 
     
@@ -492,7 +498,7 @@ if __name__=="__main__":
     
     logger.info("Running crawler")
     try:
-        crawler.run_crawl()    
+        failed, tried = crawler.run_crawl()    
         logger.info("✅ Crawling Finished")
             
         finished_time = time.time()
@@ -508,7 +514,9 @@ if __name__=="__main__":
                 "date": airflow_json['date'],
                 "batch": airflow_json['batch'],
                 "start_datetime": airflow_json['start_datetime'],
-                "end_datetime": airflow_json['start_datetime']
+                "end_datetime": airflow_json['start_datetime'],
+                "attempted_posts_count": tried,
+                "extracted_posts_count": tried - failed
                 }
         }
         pprint.pprint(return_params)
@@ -526,6 +534,8 @@ if __name__=="__main__":
                 "date": airflow_json['date'],
                 "batch": airflow_json['batch'],
                 "start_datetime": airflow_json['start_datetime'],
-                "end_datetime": airflow_json['start_datetime']
+                "end_datetime": airflow_json['start_datetime'],
+                "attempted_posts_count": tried,
+                "extracted_posts_count": tried - failed
                 }
     }    

@@ -494,19 +494,24 @@ class DC_crawler:
             print(f"✅ Gathering link completed : {len(self.post_link)} links")
         
         # 수집된 링크를 방문하며 html 소스 저장
+        failed = 0
         for i, post in enumerate(self.post_link):
 
-            parsed_source = self.get_html_of_post(driver, post['url'])
-            res_json = self.html_parser(driver, post, parsed_source)
-            
-            logger.info(f"Saving...[{i+1} / {len(self.post_link)}]")
-            print(f"Saving...[{i+1} / {len(self.post_link)}]")
-            self.save_json(res_json, post)
+            try:
+                parsed_source = self.get_html_of_post(driver, post['url'])
+                res_json = self.html_parser(driver, post, parsed_source)
+                
+                logger.info(f"Saving...[{i+1} / {len(self.post_link)}]")
+                print(f"Saving...[{i+1} / {len(self.post_link)}]")
+                self.save_json(res_json, post)
+            except:
+                failed += 1
+                continue
                 
             time.sleep(random.randrange(0, 50) / 100)
         
         driver.close()
-        return True  
+        return failed, len(self.post_link)  
 
 def lambda_handler(event, context):
     init_time = time.time()
@@ -531,7 +536,7 @@ def lambda_handler(event, context):
     logger.info("▶ Running crawler...")
     
     try:
-        crawler.run_crawl()
+        failed, tried = crawler.run_crawl()
         logger.info("✅ Crawling Finished")
         print("✅ Crawling Finished")
         finished_time = time.time()
@@ -547,7 +552,9 @@ def lambda_handler(event, context):
                 "date": date,
                 "batch": batch,
                 "start_datetime": s_date,
-                "end_datetime": e_date
+                "end_datetime": e_date,
+                "attempted_posts_count": tried,
+                "extracted_posts_count": tried - failed                
                 }
         }        
     except Exception as e:
@@ -566,6 +573,8 @@ def lambda_handler(event, context):
                 "batch": batch,
                 "start_datetime": s_date,
                 "end_datetime": e_date,
+                "attempted_posts_count": tried,
+                "extracted_posts_count": tried - failed,                
                 "Error": e
                 }
         }  

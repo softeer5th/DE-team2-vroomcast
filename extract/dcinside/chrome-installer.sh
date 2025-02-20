@@ -13,10 +13,12 @@ latest_chrome_driver_linux_download_url="$(echo "$json_data" | jq -r ".channels.
 download_path_chrome_linux="/opt/chrome-headless-shell-linux64.zip"
 download_path_chrome_driver_linux="/opt/chromedriver-linux64.zip"
 mkdir -p "/opt/chrome"
-curl -Lo $download_path_chrome_linux https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.98/linux64/chrome-linux64.zip #$latest_chrome_linux_download_url
+# curl -Lo $download_path_chrome_linux https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.98/linux64/chrome-linux64.zip #$latest_chrome_linux_download_url
+curl -Lo $download_path_chrome_linux $latest_chrome_linux_download_url
 unzip -q $download_path_chrome_linux -d "/opt/chrome"
 rm -rf $download_path_chrome_linux
 mkdir -p "/opt/chrome-driver"
-curl -Lo $download_path_chrome_driver_linux https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.98/linux64/chromedriver-linux64.zip #$latest_chrome_driver_linux_download_url
+# curl -Lo $download_path_chrome_driver_linux https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.98/linux64/chromedriver-linux64.zip #$latest_chrome_driver_linux_download_url
+curl -Lo $download_path_chrome_driver_linux $latest_chrome_driver_linux_download_url
 unzip -q $download_path_chrome_driver_linux -d "/opt/chrome-driver"
 rm -rf $download_path_chrome_driver_linux
