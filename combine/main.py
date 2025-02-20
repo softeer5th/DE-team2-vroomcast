@@ -199,7 +199,7 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
             logger.error(f"Error uploading data: {str(e)}")
 
     chunk_idx = 0
-    chunk_size = 20
+    chunk_size = 200
 
     while True:
         chunk = list(islice(extracted_data, chunk_size))
@@ -241,9 +241,9 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
         if comment_dynamics:
             _upload_data(comment_dynamics, COMMENT_DYNAMIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, batch=batch, type="dynamic", chunk=chunk_idx))
 
-    _upload_id_set(s3, bucket, id_set)
+        chunk_idx += 1
 
-    chunk_idx += 1
+    _upload_id_set(s3, bucket, id_set)
 
 def lambda_handler(event, context):
     start_time = datetime.now()
@@ -255,7 +255,7 @@ def lambda_handler(event, context):
         batch = event.get("batch")
         batch_datetime = event.get("batch_datetime")
 
-        if not all([bucket, car_id, date, batch, batch_datetime]):
+        if any([arg is None for arg in [bucket, car_id, date, batch, batch_datetime]]):
             raise ValueError("Missing required input")
 
         combine(bucket, car_id, date, batch, batch_datetime)
