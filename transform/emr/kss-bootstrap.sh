@@ -14,7 +14,4 @@ sudo python3 -m pip install --upgrade wheel
 echo "Installing KSS (Korean Sentence Splitter)..."
 sudo python3 -m pip install kss
 
-echo "Installing OpenAI library..."
-sudo python3 -m pip install openai
-
 sudo python3 -m pip install pandas
