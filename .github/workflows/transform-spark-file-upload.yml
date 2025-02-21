@@ -1,0 +1,33 @@
+name: Transform Spark File Upload to S3
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - transform/emr
+    paths:
+      - 'transform/main/**'
+
+jobs:
+  upload-to-s3:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # GitHub OIDC 사용을 위한 설정
+      contents: read
+
+    steps:
+      # 1. Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Configure AWS CLI
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      # 3. Sync Files to S3
+      - name: Upload emr main code directory to S3
+        run: |
+          aws s3 sync ./transform/main/ ${{secrets.SPARK_DIR_FOR_EMR}}

@@ -1,0 +1,113 @@
+name: Deploy Test Lambda for Sentiment Analysis
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - 'transform/sentiment/**'
+  workflow_dispatch:
+
+jobs:
+  deploy-test-lambda:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'transform/sentiment'
+    permissions:
+      id-token: write  # GitHub OIDC를 사용하기 위한 설정
+      contents: read
+
+    env:
+      TARGET_DIR: "transform/sentiment"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ap-northeast-2 | \
+          docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_REGISTRY }}
+
+      - name: Build & Push Test Lambda Image
+        run: |
+          LAMBDA_NAME=$(basename $TARGET_DIR)
+          TEST_LAMBDA_NAME="test-transform-$LAMBDA_NAME"
+          IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME:latest"
+          
+          echo "Building & Deploying Test Lambda: $TEST_LAMBDA_NAME"
+          docker build --no-cache -t vroomcast/$TEST_LAMBDA_NAME $TARGET_DIR
+          docker tag vroomcast/$TEST_LAMBDA_NAME:latest $IMAGE_URI
+          docker push $IMAGE_URI
+          
+          echo "Verify Lambda Image Digest"
+          LOCAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_URI | cut -d '@' -f 2)
+          for i in {1..10}; do
+            ECR_DIGEST=$(aws ecr batch-get-image --repository-name vroomcast/$TEST_LAMBDA_NAME --image-ids imageTag=latest --query 'images[0].imageId.imageDigest' --output text)
+            if [ "$ECR_DIGEST" == "$LOCAL_DIGEST" ]; then
+              echo "Image is successfully updated in ECR!"
+              break
+            fi
+            echo "ECR image is not updated yet... retrying in 3 seconds"
+            sleep 3
+          done
+          
+          if [ "$ECR_DIGEST" != "$LOCAL_DIGEST" ]; then
+            echo "ECR image digest mismatch! Exiting..."
+            exit 1
+          fi
+          
+          IMAGE_URI_WITH_DIGEST="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$TEST_LAMBDA_NAME@${LOCAL_DIGEST}"
+          
+          echo "Create/Update Test Lambda Function"
+          aws lambda delete-function --function-name $TEST_LAMBDA_NAME --region ap-northeast-2 || echo "Lambda doesn't exist yet."
+          aws lambda create-function \
+            --function-name $TEST_LAMBDA_NAME \
+            --package-type Image \
+            --code ImageUri=$IMAGE_URI_WITH_DIGEST \
+            --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
+            --timeout 900 \
+            --region ap-northeast-2 \
+            --environment Variables="{OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}}"
+
+      - name: Wait for Lambda to be Active
+        run: |
+          sleep 5
+          LAMBDA_NAME=$(basename $TARGET_DIR)
+          TEST_LAMBDA_NAME="test-transform-$LAMBDA_NAME"
+          while [[ "$(aws lambda get-function-configuration --function-name "$TEST_LAMBDA_NAME" --query 'State' --output text)" == "Pending" ]]; do
+            echo "Lambda is still pending... waiting 3 seconds"
+            sleep 3
+          done
+          echo "Lambda is ready!"
+          sleep 5
+
+      - name: Invoke Test Lambda for Processing
+        run: |
+          TEST_LAMBDA_NAME="test-transform-sentiment"
+          PAYLOAD=$(jq -n \
+            --arg bucket_name "${{ secrets.AWS_TEST_BUCKET_NAME }}" \
+            --arg input_dir "test-github/before-sentiment/" \
+            --arg output_dir "test-github/after-sentiment/" \
+            '{ "bucket_name": $bucket_name, "input_dir": $input_dir, "output_dir": $output_dir }')
+          
+          echo "Invoking Lambda: $TEST_LAMBDA_NAME"
+          aws lambda invoke --function-name $TEST_LAMBDA_NAME \
+            --cli-binary-format raw-in-base64-out \
+            --payload "${PAYLOAD}" response.json \
+            --region ap-northeast-2 \
+            --cli-read-timeout 840
+          cat response.json
+          
+          STATUS_CODE=$(jq '.statusCode' response.json)
+          if [ "$STATUS_CODE" -ne 200 ]; then
+            echo "Lambda returned error with statusCode: $STATUS_CODE"
+            exit 1
+          fi

@@ -1,11 +1,11 @@
-name: Deploy Lambda For DCinside
+name: Deploy Lambda for Sentiment Analysis
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'extract/dcinside/**'
+      - 'transform/sentiment/**'
   workflow_dispatch:
 
 jobs:
@@ -16,9 +16,9 @@ jobs:
       contents: read
 
     env:
-      TARGET_DIR: "extract/dcinside"
-      DEPLOY_LAMBDA_NAME: "vroomcast-lambda-extract-dc"
-      DEPLOY_IMAGE_NAME: "extract-dc"
+      TARGET_DIR: "transform/sentiment"
+      DEPLOY_LAMBDA_NAME: "vroomcast-lambda-sentiment"
+      DEPLOY_IMAGE_NAME: "sentiment-analyze"
 
     steps:
     - name: Checkout Repository
@@ -45,7 +45,7 @@ jobs:
         docker build --no-cache -t vroomcast/$DEPLOY_IMAGE_NAME $TARGET_DIR
         docker tag vroomcast/$DEPLOY_IMAGE_NAME:latest $IMAGE_URI
         docker push $IMAGE_URI
-        
+
         echo "Check latest image has same digest with expected one"
         LOCAL_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_URI | cut -d '@' -f 2)
         for i in {1..10}; do
@@ -57,20 +57,25 @@ jobs:
           fi
           echo "ECR image not updated yet. Retrying in 3 seconds..."
         done
-        
+
         if [ "$ECR_DIGEST" != "$LOCAL_DIGEST" ]; then
           echo "ECR image digest does not match local digest! Exiting..."
           exit 1
         fi
 
-        echo "Creating or Updating Deploy Lambda: $DEPLOY_LAMBDA_NAME"
+        echo "Image Digest Matched: Proceeding with Lambda Deployment."
+
+    - name: Deploy Lambda Function
+      run: |
+        echo "Deploying Lambda: $DEPLOY_LAMBDA_NAME"
+        IMAGE_URI="${{ secrets.AWS_ECR_REGISTRY }}/vroomcast/$DEPLOY_IMAGE_NAME:latest"
         aws lambda create-function \
           --function-name $DEPLOY_LAMBDA_NAME \
           --package-type Image \
           --code ImageUri=$IMAGE_URI \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
-          --timeout 300 \
-          --memory-size 2048 \
+          --timeout 900 \
+          --environment Variables="{OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}}" \
           --region ap-northeast-2 || \
         aws lambda update-function-code \
           --function-name $DEPLOY_LAMBDA_NAME \
