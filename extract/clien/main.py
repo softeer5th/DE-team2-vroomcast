@@ -69,13 +69,14 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
     end_datetime = datetime.strptime(end_datetime, "%Y-%m-%dT%H:%M:%S")
     page_number = 0
     urls = {}
-
+    failed_page_number = []
     while page_number < 50:
         # URL 생성 및 요청
         search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
         html_content = fetch_html(search_url)
         if not html_content:
             logger.error(f"failed to fetch {search_url}")
+            page_number += 1
             continue
         # 응답 파싱 및 필터링
         soup = BeautifulSoup(html_content, "html.parser")
@@ -92,6 +93,17 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
 
         page_number += 1
         time.sleep(random.randint(*SLEEP_SECONDS))  # 요청 간 대기 시간
+    logger.info(f"Found {len(urls)} URLs.")
+    logger.info(f"Try failed page URLs.")
+    for page_number in failed_page_number:
+        search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
+        html_content = fetch_html(search_url)
+        if not html_content:
+            logger.error(f"failed to fetch {search_url}")
+            continue
+        soup = BeautifulSoup(html_content, "html.parser")
+        rows = soup.select("div.list_item.symph_row.jirum")
+        urls.update(parse_rows(rows, start_datetime, end_datetime))
 
     logger.info(f"Extracted {len(urls)} URLs.")
     return urls
