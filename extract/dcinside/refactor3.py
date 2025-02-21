@@ -27,20 +27,29 @@ SEARCH_URL_TITLE_AND_CONTENT = f"https://gall.dcinside.com/board/lists/?id=car_n
 
 def convert_date_format(date_str:str):
     """
-    yyyy-mm-dd HH:MM:SS -> yyyy-mm-ddTHH:MM:SS (ISO Format)
+    Converts a datetime string into ISO 8601 format by replacing the space with 'T'.
+    
+    Args:
+        date_str (str): Datetime string in the format "yyyy-mm-dd HH:MM:SS".
+    
+    Returns:
+        str: Datetime string reformatted to "yyyy-mm-ddTHH:MM:SS".
     """
     return 'T'.join(date_str.split())
 
 def md_to_ymd(date_str:str):
     """
-    댓글 타임스탬프의 두 가지 날짜 형식을 입력받아 "yyyy-mm-dd HH:MM:SS" 형식으로 변환합니다.
-    본문 및 댓글의 날짜 형식에 대응합니다.
+    입력된 댓글 날짜 문자열을 "yyyy-mm-dd HH:MM:SS" 형식으로 변환합니다.
+    
+    주어진 날짜 문자열은 두 가지 형식 중 하나여야 합니다:
+      - "yyyy.mm.dd HH:MM:SS": 연, 월, 일 및 시간 정보가 포함된 형식.
+      - "mm.dd HH:MM:SS": 월, 일 및 시간 정보만 포함된 형식 (현재 연도가 추가됨).
     
     Args:
-        date_str: 변환할 날짜 문자열 ("yyyy.mm.dd HH:MM:SS" 또는 "mm.dd HH:MM:SS" 형식)
-
+        date_str (str): 변환 대상 날짜 문자열. 지원 형식은 "yyyy.mm.dd HH:MM:SS" 또는 "mm.dd HH:MM:SS"입니다.
+    
     Returns:
-        "yyyy-mm-dd HH:MM:SS" 형식으로 변환된 날짜 문자열
+        str: "yyyy-mm-dd HH:MM:SS" 형식의 날짜 문자열. 변환에 실패하면 "Invalid date format"를 반환.
     """
     try:
         # "yyyy.mm.dd HH:MM:SS" 형식인 경우 그대로 반환
@@ -57,14 +66,29 @@ def md_to_ymd(date_str:str):
 
 def is_time_in_range(time_str, start_time, end_time):
     """
-    입력된 시간 문자열이 이번 배치 시간과 3일 전 사이에 있는지 판단하는 함수.
-
+    Determines the position of a given time relative to a specified range.
+    
     Args:
-        time_str: "%Y-%m-%d %H:%M:%S" 형식의 시간 문자열.
-
+        time_str (str): Datetime string in "%Y-%m-%d %H:%M:%S" format to be evaluated.
+        start_time (str): Start of the time range in "%Y-%m-%d %H:%M:%S" format.
+        end_time (str): End of the time range in "%Y-%m-%d %H:%M:%S" format.
+    
     Returns:
-        True: 입력된 시간이 현재 시간과 현재 시간의 6시간 전 사이에 있는 경우.
-        False: 입력된 시간이 현재 시간과 현재 시간의 6시간 전 사이에 없는 경우.
+        str or bool: 
+            "IN" if time_str is between start_time and end_time (inclusive);
+            "OVER" if time_str is later than end_time;
+            "UNDER" if time_str is earlier than start_time;
+            False if time_str does not match the expected datetime format.
+    
+    Example:
+        >>> is_time_in_range("2025-02-20 12:00:00", "2025-02-20 10:00:00", "2025-02-20 14:00:00")
+        "IN"
+        >>> is_time_in_range("2025-02-20 15:00:00", "2025-02-20 10:00:00", "2025-02-20 14:00:00")
+        "OVER"
+        >>> is_time_in_range("2025-02-20 09:00:00", "2025-02-20 10:00:00", "2025-02-20 14:00:00")
+        "UNDER"
+        >>> is_time_in_range("invalid", "2025-02-20 10:00:00", "2025-02-20 14:00:00")
+        False.
     """
 
     try:
@@ -89,6 +113,21 @@ class DC_crawler:
     post_link = [
     ]
     def __init__(self, s_date, e_date, car_id, car_keyword, is_daily_batch, batch, folder_date):
+        """
+            Initialize a new instance of the web crawler with specified date range, identifiers, and crawling options.
+        
+            Args:
+                s_date (str): Start date for the crawling process (e.g., '2025-01-01').
+                e_date (str): End date for the crawling process (e.g., '2025-01-31').
+                car_id (int or str): Identifier for the car or category to be scraped.
+                car_keyword (list of str): Keywords used for constructing search URLs.
+                is_daily_batch (bool): Flag indicating if the crawl is part of a daily batch process.
+                batch (int): Identifier or mode indicator for batch processing.
+                folder_date (str): Date string used for naming the output folder.
+        
+            Constructs search URLs by concatenating a base URL with each keyword from car_keyword and
+            initializes the attribute for tracking processed IDs.
+            """
         self.start_date = s_date
         self.end_date = e_date
         self.car_id = car_id
@@ -103,6 +142,16 @@ class DC_crawler:
         # chrome_path = "/opt/chrome/chrome-headless-shell-mac-arm64"
         # driver_path = "/opt/chromedriver"   
 
+        """
+        Returns a headless Chrome WebDriver instance configured for scraping.
+        
+        Configures Chrome options for headless browsing by enabling headless mode, disabling 
+        sandbox and GPU, setting a custom user-agent, and specifying a window size. Uncomment 
+        and adjust the binary location and driver service settings for local execution as needed.
+        
+        Returns:
+            webdriver.Chrome: A configured Chrome WebDriver instance ready for headless operation.
+        """
         options = webdriver.ChromeOptions()
         # options.binary_location = chrome_path  # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
         options.add_argument("--headless")  # Headless 모드
@@ -120,6 +169,26 @@ class DC_crawler:
         return driver
     
     def get_entry_point(self, driver:webdriver.Chrome, url):
+        """
+        Retrieves the search results page URL after applying a date filter.
+        
+        Navigates to the provided URL, opens the date picker, inputs the target date extracted
+        from the instance's end_date, and triggers the search. Returns the updated page URL
+        after the search results are loaded.
+        
+        Args:
+            driver (webdriver.Chrome): Selenium WebDriver used for browser interactions.
+            url (str): The initial URL to visit for performing the search.
+        
+        Returns:
+            str: The URL of the search results page after applying the date filter.
+        
+        Example:
+            entry_url = crawler.get_entry_point(driver, "https://example.com/search")
+            
+        Raises:
+            TimeoutException: If any expected element is not found within the allotted wait time.
+        """
         s_date = self.start_date
         e_date = self.end_date.split()[0]
         
@@ -170,7 +239,26 @@ class DC_crawler:
         
     def crawl_post_link(self, soup:BeautifulSoup, cur_date:str):
         """
-        현재 페이지에서 게시글들의 링크를 수집합니다.
+        Collects and stores post links from the current page.
+        
+        Parses post entries from the provided BeautifulSoup object, validates each post's date 
+        against the crawler's time range (self.start_date to self.end_date), and logs the process. 
+        If a post's date is earlier than the start date ("UNDER"), processing stops by returning False. 
+        Posts with dates after the end date ("OVER") are skipped. For valid posts, extracts the post ID, 
+        URL, and timestamp, appending this data to self.post_link while avoiding duplicates via self.id_check.
+        
+        Args:
+            soup (BeautifulSoup): Parsed HTML content of the current forum page.
+            cur_date (str): Current date grouping in "YYYY-MM-DD" format used for logging.
+        
+        Returns:
+            Union[str, bool]: The latest "YYYY-MM-DD" date string encountered from the posts, or False 
+            if processing is halted due to an out-of-range date.
+        
+        Side Effects:
+            Appends dictionaries with keys "url", "id", and "date" to self.post_link.
+            Updates self.id_check with new post identifiers.
+            Logs informational messages regarding the processing of post dates and duplicates.
         """
         posts = soup.select("tr.ub-content.us-post")
         
@@ -214,9 +302,22 @@ class DC_crawler:
     
     def page_traveler(self, driver:webdriver.Chrome, current_link:str):
         """
-        페이징 박스를 순회합니다.
-        시간 역순으로 순회합니다. 
-        (페이징 박스는 정방향 순회, 보이는 게시글은 시간 역순)
+        Iterates through pagination controls to collect post links until the date range is exceeded.
+        
+        Navigates through pages using a Selenium Chrome WebDriver starting from a given URL.
+        On each page, the HTML content is parsed with BeautifulSoup and post links are extracted
+        and validated against the current reference date via `crawl_post_link`. If valid posts
+        are found, the function locates the next page link from the pagination marker, updates the
+        current URL, and introduces a randomized delay to mimic natural browsing. Iteration stops
+        once posts outside the configured date range (from `self.start_date` to `self.end_date`)
+        are encountered.
+        
+        Args:
+            driver (webdriver.Chrome): The web driver instance used for navigating pages.
+            current_link (str): The URL of the current page from which to start pagination.
+        
+        Returns:
+            None.
         """
         # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
         cur_date = self.end_date
@@ -250,8 +351,19 @@ class DC_crawler:
     
     def get_html_of_post(self, driver, url:str):
         """
-        각 게시글의 html source를 가져옵니다.
-        가져온 source를 반환합니다.
+        Fetch HTML content of a post using the Selenium driver.
+        
+        Attempts to load the specified URL and parse its HTML content into a BeautifulSoup object.
+        Retries up to MAX_TRY times in case of retrieval failure, using a slight random delay between attempts.
+        An error is logged for each failed request. Returns False if all attempts are unsuccessful.
+        
+        Args:
+            driver (webdriver.Chrome): Selenium WebDriver instance used to load the URL.
+            url (str): The URL of the post to retrieve.
+        
+        Returns:
+            BeautifulSoup: Parsed HTML content if retrieval is successful.
+            bool: False if unable to retrieve the content after all retries.
         """
         # headers = {'User-Agent': "Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)"}
         for _ in range(self.MAX_TRY):
@@ -270,12 +382,49 @@ class DC_crawler:
         return False
             
     def html_parser(self, driver:webdriver.Chrome, post_info:dict, parsed_post:BeautifulSoup):
+        """
+        Parses a forum post's HTML to extract details and comments.
+        
+        Extracts the post title, content, view count, recommendation counts, and comments
+        from the provided HTML. Handles pagination for comments and standardizes dates using
+        helper functions.
+        
+        Args:
+            driver (webdriver.Chrome): Active Selenium WebDriver instance.
+            post_info (dict): Dictionary containing post metadata, including keys 'url', 'id',
+                and 'date' (raw date string).
+            parsed_post (BeautifulSoup): Parsed HTML document of the forum post.
+        
+        Returns:
+            dict: A dictionary with the following keys:
+                - post_id (int): Unique identifier of the post.
+                - post_url (str): URL of the post.
+                - title (str): Title of the post.
+                - content (str): Main post content.
+                - created_at (str): Post creation date in ISO format.
+                - view_count (int): Number of times the post was viewed.
+                - upvote_count (int): Count of upvotes on the post.
+                - downvote_count (int): Count of downvotes on the post.
+                - comment_count (int): Total number of comments.
+                - comments (list): List of dictionaries for each comment, each containing:
+                    'comment_id' (int), 'content' (str), 'is_reply' (int),
+                    'created_at' (str), 'upvote_count' (int), and 'downvote_count' (int).
+        """
         print("Now Watching ▶ " , driver.current_url)
         def parse_main_content(target_element):
             """
-            게시글 본문 크롤링
+            Extracts main content and vote counts from a post element.
+            
+            Args:
+                target_element (bs4.element.Tag): A BeautifulSoup Tag containing the post's HTML structure,
+                    which should include a div with class "write_div" for the content and p tags with classes 
+                    "up_num font_red" for upvotes and "down_num" for downvotes.
+            
             Returns:
-                본문 내용, 추천 수, 비추 수
+                tuple: A tuple containing:
+                    - content (str): The post's main text with line breaks preserved.
+                    - up_votes (int): The number of upvotes.
+                    - down_votes (int): The number of downvotes.
             """
             write_div = target_element.find("div", class_="write_div")
             gaechu = int(target_element.find("p", class_="up_num font_red").get_text(strip=True))
@@ -285,13 +434,28 @@ class DC_crawler:
 
         def parse_comments(soup:BeautifulSoup):
             """
-            댓글 및 대댓글을 수집하여 리스트로 반환하는 함수.
+            Collects comments and replies from a parsed HTML document.
+            
+            Parses the top-level comment list from a <ul> element with class "cmt_list". Extracts details from each primary comment—including its ID, text content, and creation time (converted to ISO format via helper functions)—while initializing vote counts. If nested replies exist under a reply list, iterates through each reply and extracts corresponding details, associating them with the parent comment's ID.
             
             Args:
-                soup (BeautifulSoup): BeautifulSoup으로 파싱된 HTML
+                soup (BeautifulSoup): A BeautifulSoup object representing the parsed HTML of a post.
             
             Returns:
-                list[dict]: 댓글과 대댓글을 포함한 리스트
+                list[dict]: A list of dictionaries for comments and replies. Each dictionary contains:
+                    - comment_id (int): Unique identifier for the comment or the parent comment's ID for replies.
+                    - content (str): Text content of the comment or reply.
+                    - is_reply (int): 0 for a primary comment, 1 for a reply.
+                    - created_at (str): ISO-formatted creation timestamp ('yyyy-mm-ddTHH:MM:SS').
+                    - upvote_count (int): Initialized to 0.
+                    - downvote_count (int): Initialized to 0.
+            
+            Example:
+                >>> from bs4 import BeautifulSoup
+                >>> html = '<html>...</html>'
+                >>> soup = BeautifulSoup(html, 'html.parser')
+                >>> comments = parse_comments(soup)
+                >>> print(comments[0]["content"])
             """
             comment_list = []
             comment_ul = soup.find("ul", class_="cmt_list")
@@ -362,7 +526,22 @@ class DC_crawler:
 
         def scrape_all_comment_pages(driver, soup):
             """
-            주어진 soup을 기반으로 댓글 페이지를 순회하며 모든 댓글을 수집하는 함수.
+            댓글 페이지를 순회하며 모든 댓글을 수집한다.
+            
+            첫 페이지에서 댓글 총 개수를 파악한 후, 페이지 네비게이션 버튼을 따라 모든 댓글을 추출한다.
+            각 페이지 전환은 JavaScript 실행으로 이루어지며, 새로운 페이지의 로딩이 완료될 때까지 대기한다.
+            
+            Args:
+                driver (selenium.webdriver.Chrome): 활성화된 Selenium WebDriver 인스턴스.
+                soup (BeautifulSoup): 현재 페이지의 HTML을 파싱한 BeautifulSoup 객체.
+            
+            Returns:
+                tuple: (comment_count, all_comments)
+                    comment_count (int): 첫 페이지에서 추출한 댓글 총 개수.
+                    all_comments (list): 모든 페이지에서 수집한 댓글 리스트.
+            
+            Raises:
+                TimeoutException: 다음 댓글 페이지가 로드되지 않을 경우 발생.
             """
             comment_count_tag = soup.find('span', class_='gall_comment')
             comment_count = int(comment_count_tag.find('a').text[len("댓글 "):]) if comment_count_tag else 0
@@ -426,6 +605,17 @@ class DC_crawler:
         return parsed_finally
     
     def save_json(self, parsed_json:json, post_info:dict):
+        """
+        Persists extracted post JSON data to a file.
+        
+        Constructs the file path using crawler attributes (car_id, folder_date, batch) and the post's
+        'id' from post_info, creates the necessary directories if they do not exist, and writes the JSON
+        data in a pretty-printed format. Logs an error if the file write operation fails.
+        
+        Args:
+            parsed_json (json): The JSON data to be saved.
+            post_info (dict): Dictionary containing post details; must include the key 'id'.
+        """
         file_path = f"extracted/{self.car_id}/{self.folder_date}/{self.batch}/raw/dcinside/{post_info['id']}.json"
         directory = os.path.dirname(file_path)
 
@@ -443,6 +633,18 @@ class DC_crawler:
         
     def run_crawl(self,):
         # 드라이버 세팅
+        """
+        Orchestrates the overall crawling workflow to extract and save post data.
+        
+        Initializes a headless WebDriver, navigates through each search URL to collect post links,
+        retrieves individual post HTML content, parses it to extract data, and attempts to save the
+        results as JSON files. Logs progress and introduces random delays between processing posts. In
+        case of save failures, increments a failure counter.
+        
+        Returns:
+            tuple of (int, int): A tuple where the first element is the count of failed post saves and
+            the second element is the total number of post links processed.
+        """
         driver=self._get_driver()
         logger.info("✅ Driver Successfully Set.")
         

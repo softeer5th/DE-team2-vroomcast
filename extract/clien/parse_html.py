@@ -15,7 +15,30 @@ COMMENT_TAG = 'div.comment_row'
 
 
 def extract_optional_text(element, selector, allow_empty=False):
-    """선택 요소에서 텍스트를 추출하거나 None 반환"""
+    """
+    Extracts text from an element matching a CSS selector.
+    
+    Searches for a sub-element within the given element using the specified CSS selector.
+    Strips whitespace from the located element's text and, if the resulting text is empty
+    and allow_empty is False, returns None.
+    
+    Args:
+        element (bs4.element.Tag): The BeautifulSoup element to search within.
+        selector (str): A CSS selector used to locate the sub-element.
+        allow_empty (bool, optional): If False and the stripped text is empty, returns None.
+                                      Defaults to False.
+    
+    Returns:
+        Optional[str]: The stripped text from the sub-element, or None if not found 
+                       or empty when not allowed.
+    
+    Example:
+        >>> from bs4 import BeautifulSoup
+        >>> html = "<div><p> Hello World </p></div>"
+        >>> soup = BeautifulSoup(html, "html.parser")
+        >>> extract_optional_text(soup, "p")
+        "Hello World"
+    """
     selected = element.select_one(selector)
     if selected:
         text = selected.text.strip()
@@ -26,27 +49,55 @@ def extract_optional_text(element, selector, allow_empty=False):
 
 
 def normalize_text(text):
-    """텍스트 정규화: 여분의 공백 및 인코딩 제거"""
+    """
+    Normalize input text by replacing extra whitespace and encoding artifacts.
+    
+    Args:
+        text (str): The text string to normalize. May contain extraneous whitespace or non-breaking
+                    space characters.
+    
+    Returns:
+        str: The cleaned text string with all consecutive whitespace replaced by a single space.
+             Returns None if the input is None.
+    
+    Example:
+        >>> normalize_text('Hello\xa0   World')
+        'Hello World'
+    """
     return re.sub(r'\s+', ' ', text.replace("\xa0", " ")) if text else None
 
 
 def get_post_dict(html_file, file_id, url):
     """
-    Parses the provided HTML content to extract post details along with associated metadata
-    and comments. The function processes elements inside a predefined content view tag,
-    extracting the post's title, date of creation, article content, and interaction metrics
-    such as view count, upvotes, and comment count. It also processes and structures the
-    comments into a list of dictionaries containing individual comment data like content,
-    reply status, timestamps, and upvote counts.
-
-    :param html_file: HTML content of the post
-    :type html_file: str
-    :param file_id: Unique identifier of the file or post
-    :type file_id: int
-    :param url: URL of the post
-    :type url: str
-    :return: A dictionary containing post details and comments or None if parsing fails
-    :rtype: dict or None
+    Extracts post details and comment metadata from HTML content.
+    
+    Parses the HTML using BeautifulSoup to locate and extract the post's title, creation date,
+    article content, view count, upvote count, and comment count from predefined CSS selectors.
+    Iterates over comment elements to construct a list of comment dictionaries with details such as
+    comment ID, content, reply status, timestamp, and upvote count. Returns a dictionary containing
+    all extracted data or None if critical elements are missing or an error occurs during parsing.
+    
+    Args:
+        html_file (str): Raw HTML string of the post.
+        file_id (int): Unique identifier of the post.
+        url (str): URL of the post.
+    
+    Returns:
+        dict or None: Dictionary with keys:
+            - "post_id" (int): Post identifier.
+            - "post_url" (str): URL of the post.
+            - "title" (str): Post title.
+            - "content" (str): Normalized article content.
+            - "created_at" (str): ISO 8601 formatted creation date.
+            - "view_count" (int): Number of views, or None.
+            - "upvote_count" (int): Number of upvotes, or None.
+            - "downvote_count": Always None.
+            - "comment_count" (int): Number of comments, or None.
+            - "comments" (list): List of dictionaries with comment details.
+        Returns None if parsing fails.
+    
+    Notes:
+        Parsing errors and missing elements are logged. No exceptions are raised.
     """
     try:
         soup = BeautifulSoup(html_file, "html.parser")

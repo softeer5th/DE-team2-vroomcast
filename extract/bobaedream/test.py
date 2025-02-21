@@ -20,6 +20,16 @@ from post_info_list_extractor import (
 
 
 def test_post_extractor():
+    """
+    Run a parsing test on a sample post HTML file.
+    
+    Opens "sample/post.html" using UTF-8 encoding, parses its content to generate a BeautifulSoup
+    object via _get_soup, and prints the extracted post details including title, creation date,
+    view count, upvote count, comment count, content, and comments using corresponding helper functions.
+    
+    Raises:
+        FileNotFoundError: If the sample HTML file does not exist.
+    """
     with open("sample/post.html", "r", encoding="utf-8") as f:
         html = f.read()
 
@@ -52,6 +62,15 @@ def test_get_post_infos():
 
 # pytest -v -s test.py::test_find_start_page
 def test_find_start_page():
+    """
+    Tests the determination of the starting page for search results and validates post extraction.
+    
+    Using the preset keyword "아반떼" with the date "2023-07-01" as both the starting and ending date, the test:
+    - Retrieves the starting page number via _find_start_page.
+    - Fetches the HTML search result of that page using _fetch_search_result.
+    - Extracts post entries from the HTML with _get_soup and a CSS selector.
+    - Prints the starting page, the count of posts, and the post list for manual verification.
+    """
     keyword = "아반떼"
     start_date = "2023-07-01"
     end_date = "2023-07-01"
@@ -69,6 +88,14 @@ def test_find_start_page():
 
 # pytest -v -s test.py::test_extract_post
 def test_extract_post():
+    """
+    Test extraction of a specific post and save its parsed data.
+    
+    Extracts post details from a preset URL and post ID using the extract_post function.
+    Prints the extracted data to the console and writes the result to 'sample/parsed_post.json'
+    in JSON format with UTF-8 encoding. This test verifies that post extraction and JSON
+    serialization function as expected.
+    """
     url = "https://www.bobaedream.co.kr/view?code=national&No=2349037"
     id = "2349037"
 
@@ -82,6 +109,14 @@ def test_extract_post():
 
 # pytest -v -s test.py::test
 def test():
+    """
+    Test complete post extraction workflow.
+    
+    Retrieves post metadata for the keyword "아반떼" from 2025-02-15T12:00:00 to 2025-02-17T15:15:00 using get_post_infos(). Iterates through the returned posts, and for each one, calls extract_post() to obtain detailed post data. If extraction is successful, prints the post ID and creation date, then saves the post details as a JSON file in the "sample" directory (created if necessary).
+    
+    Returns:
+        None
+    """
     keyword = "아반떼"
     start_datetime = "2025-02-15T12:00:00"
     end_datetime = "2025-02-17T15:15:00"

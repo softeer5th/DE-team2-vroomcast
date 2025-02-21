@@ -7,6 +7,23 @@ import os
 
 def vector_dynamic_post(before_dynamic_post_df, after_dynamic_post_df):
     # Outer join on 'id'
+    """
+    Compute differences of shared columns between pre- and post-event DataFrames.
+    
+    Performs an outer join on the 'id' column and identifies common columns (excluding
+    'id' and 'extracted_at'). For each common column, creates a new column prefixed with
+    'v_' that subtracts the pre-event value (left DataFrame) from the post-event value (right
+    DataFrame), using the post-event value directly if the pre-event value is null. Rows where
+    the post-event 'id' is null are filtered out.
+    
+    Args:
+        before_dynamic_post_df (DataFrame): Pre-event DataFrame of dynamic posts.
+        after_dynamic_post_df (DataFrame): Post-event DataFrame of dynamic posts.
+    
+    Returns:
+        DataFrame: A DataFrame containing 'id', 'extracted_at' from the post-event DataFrame,
+        and new columns 'v_<column>' for each shared column representing the computed differences.
+    """
     joined_df = before_dynamic_post_df.alias("left").join(
         after_dynamic_post_df.alias("right"), on="id", how="outer"
     )

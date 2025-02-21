@@ -15,7 +15,18 @@ COMMENT_TAG = 'div.comment_row'
 
 
 def extract_optional_text(element, selector, allow_empty=False):
-    """선택 요소에서 텍스트를 추출하거나 None 반환"""
+    """
+    Extract text from the first matching element using a CSS selector.
+    
+    Args:
+        element (bs4.element.Tag): The BeautifulSoup element to search within.
+        selector (str): The CSS selector used to locate the target element.
+        allow_empty (bool, optional): If False, returns None when the extracted text is empty.
+            Defaults to False.
+    
+    Returns:
+        Optional[str]: The stripped text if present and valid, otherwise None.
+    """
     selected = element.select_one(selector)
     if selected:
         text = selected.text.strip()
@@ -26,27 +37,49 @@ def extract_optional_text(element, selector, allow_empty=False):
 
 
 def normalize_text(text):
-    """텍스트 정규화: 여분의 공백 및 인코딩 제거"""
+    """
+    텍스트 정규화를 수행하여 불필요한 공백 및 특정 인코딩 문자를 제거합니다.
+    
+    문자열 내의 연속된 공백(스페이스, 탭 등)을 단일 공백으로 축소하고, 넌브레이킹 스페이스(\\xa0)를 일반 공백으로 변환합니다.
+    입력 값이 None 또는 빈 문자열인 경우 None을 반환합니다.
+    
+    매개변수:
+        text (str or None): 정규화할 문자열.
+    
+    반환:
+        str or None: 정리된 문자열, 입력값이 None 또는 빈 문자열인 경우 None.
+    """
     return re.sub(r'\s+', ' ', text.replace("\xa0", " ")) if text else None
 
 
 def get_post_dict(html_file, file_id, url):
     """
-    Parses the provided HTML content to extract post details along with associated metadata
-    and comments. The function processes elements inside a predefined content view tag,
-    extracting the post's title, date of creation, article content, and interaction metrics
-    such as view count, upvotes, and comment count. It also processes and structures the
-    comments into a list of dictionaries containing individual comment data like content,
-    reply status, timestamps, and upvote counts.
-
-    :param html_file: HTML content of the post
-    :type html_file: str
-    :param file_id: Unique identifier of the file or post
-    :type file_id: int
-    :param url: URL of the post
-    :type url: str
-    :return: A dictionary containing post details and comments or None if parsing fails
-    :rtype: dict or None
+    Extracts post details, metadata, and comments from HTML content.
+    
+    Parses the provided HTML string using BeautifulSoup to retrieve the title, 
+    creation date, article content, and interaction metrics (view count, upvotes, 
+    comment count). Valid comments are processed into a list of dictionaries, each 
+    containing the comment ID, content, reply status, creation timestamp, upvote 
+    count, and a placeholder for downvote count. Returns a structured dictionary 
+    with all extracted data or None if required elements are missing or an error 
+    occurs during parsing.
+    
+    Args:
+        html_file (str): HTML content of the post.
+        file_id (int): Unique identifier of the post/file.
+        url (str): URL of the post.
+    
+    Returns:
+        dict or None: A dictionary with keys "post_id", "post_url", "title", 
+        "content", "created_at", "view_count", "upvote_count", "downvote_count", 
+        "comment_count", and "comments" (a list of comment dictionaries) if parsing 
+        succeeds; otherwise, None.
+    
+    Example:
+        >>> html_content = '<html><body><div class="content_view">...</div></body></html>'
+        >>> result = get_post_dict(html_content, 101, 'http://example.com/post/101')
+        >>> print(result)
+        {'post_id': 101, 'post_url': 'http://example.com/post/101', 'title': 'Sample Title', ...}
     """
     try:
         soup = BeautifulSoup(html_file, "html.parser")

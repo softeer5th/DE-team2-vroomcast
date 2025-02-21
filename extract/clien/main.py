@@ -20,7 +20,28 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def fetch_html(url: str) -> str:
-    """URL로부터 HTML 콘텐츠를 가져옵니다."""
+    """
+    Retrieve HTML content from a URL with retry mechanism.
+    
+    Attempts to fetch HTML content from the specified URL up to TRIAL_LIMIT times.
+    Each attempt sends an HTTP GET request using a standard browser User-Agent.
+    If a non-200 status is received or an exception occurs, the function logs the event,
+    waits for a randomized delay within SLEEP_SECONDS, and retries the request.
+    Returns the HTML content on a successful response, or an empty string if all attempts fail.
+    
+    Args:
+        url (str): The URL to retrieve HTML content from.
+    
+    Returns:
+        str: The HTML content if successfully fetched; otherwise, an empty string.
+    
+    Example:
+        >>> html = fetch_html("https://example.com")
+        >>> if html:
+        ...     print("HTML content retrieved successfully.")
+        ... else:
+        ...     print("Failed to retrieve HTML content.")
+    """
     i = 0
     while i < TRIAL_LIMIT:
         try:
@@ -40,7 +61,20 @@ def fetch_html(url: str) -> str:
 
 
 def parse_rows(rows, start_datetime, end_datetime) -> dict:
-    """HTML row 데이터를 파싱하고 필터링하여 URL 딕셔너리를 반환합니다."""
+    """
+    Parses HTML row elements to extract and filter post URLs by date range.
+    
+    Args:
+        rows (list): List of BeautifulSoup Tag objects representing HTML rows.
+        start_datetime (datetime.datetime): Lower datetime bound; posts earlier than this are ignored.
+        end_datetime (datetime.datetime): Upper datetime bound; posts later than this are ignored.
+    
+    Returns:
+        dict: Dictionary mapping post IDs (str) to fully qualified post URLs (str).
+    
+    The full URL is constructed by concatenating the module's BASE_URL with the URL postfix
+    extracted from each row.
+    """
     urls = {}
     for row in rows:
         content_time = row.select_one('span.timestamp')
@@ -59,10 +93,23 @@ def parse_rows(rows, start_datetime, end_datetime) -> dict:
 
 def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
     """
-    지정된 키워드와 날짜 기준으로 게시글 URL을 크롤링합니다.
-    :param keyword: 검색 키워드
-    :param date: 검색 대상 날짜 (형식: "%Y-%m-%d")
-    :return: 게시글 URL 딕셔너리
+    지정된 키워드와 날짜 범위 내의 게시글 URL을 크롤링합니다.
+    
+    매개변수:
+        keyword (str): 검색할 키워드.
+        start_datetime (str): 검색 시작 날짜 및 시간을 나타내며, 형식은 "%Y-%m-%dT%H:%M:%S"입니다.
+        end_datetime (str): 검색 종료 날짜 및 시간을 나타내며, 형식은 "%Y-%m-%dT%H:%M:%S"입니다.
+    
+    반환값:
+        dict: 게시글 ID를 키로, 해당 게시글의 URL을 값으로 갖는 딕셔너리.
+    
+    동작:
+        1. 키워드를 URL 인코딩하고, 시작 및 종료 날짜/시간을 datetime 객체로 변환합니다.
+        2. 최대 50페이지에 대해 생성된 검색 URL로 HTML 콘텐츠를 가져옵니다.
+        3. HTML 콘텐츠가 존재하면 BeautifulSoup로 파싱한 후, 게시글 리스트에서 지정된 날짜 범위 내의 URL을 추출합니다.
+        4. 게시글 목록이 없거나, 마지막 게시글의 날짜가 시작 날짜보다 이전인 경우 크롤링을 중단합니다.
+        5. 각 요청 사이에는 랜덤한 대기 시간을 두어 서버 부하를 완화합니다.
+        6. 최종적으로 추출된 게시글 URL 딕셔너리를 반환합니다.
     """
     encoded_keyword = urllib.parse.quote(keyword)
     start_datetime = datetime.strptime(start_datetime, "%Y-%m-%dT%H:%M:%S")
@@ -97,7 +144,22 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
     return urls
 
 def save_to_s3(s3, bucket, object_key, data):
-    """Save a JSON object to S3."""
+    """
+    Uploads a JSON-formatted object to an S3 bucket.
+    
+    Serializes the provided data with indented JSON formatting and uploads it to the
+    specified S3 bucket under the given object key. The uploaded object is marked
+    with the content type "application/json".
+    
+    Args:
+        s3: An S3 service client with a put_object method (e.g., a boto3 S3 client).
+        bucket (str): The name of the target S3 bucket.
+        object_key (str): The key (or path) under which the object is stored.
+        data (dict): A JSON-serializable object to be saved.
+    
+    Raises:
+        Any exception from s3.put_object will propagate.
+    """
     s3.put_object(
         Bucket=bucket,
         Key=object_key,
@@ -107,12 +169,40 @@ def save_to_s3(s3, bucket, object_key, data):
 
 def lambda_handler(event, context):
     """
-    AWS Lambda 핸들러 함수.
-    키워드를 기반으로 크롤링된 게시글 json 콘텐츠를 AWS S3에 업로드합니다.
-
-    :param event: Lambda 호출 시 입력된 데이터 (car_id, keywords, date, bucket 포함).
-    :param context: Lambda 실행 환경과 관련된 컨텍스트 정보.
-    :return: Lambda 실행 결과를 담은 JSON 응답.
+    Entry point for AWS Lambda to crawl posts and upload JSON files to AWS S3.
+    
+    Extracts parameters from the event to perform web scraping based on provided keywords 
+    and date range. For each keyword, crawls the corresponding posts, retrieves HTML content, 
+    converts it into JSON, and uploads the file to a designated S3 bucket. Execution metrics 
+    such as duration and counts of attempted and successfully processed posts are included in 
+    the returned response.
+    
+    Args:
+        event (dict): Input event with the following keys:
+            - "car_id" (str): Identifier for the car.
+            - "keywords" (list): List of keywords for the crawl.
+            - "date" (str): Date string associated with the crawl.
+            - "batch" (str/int): Identifier for the current batch of crawls.
+            - "start_datetime" (str): Start datetime filter for posts.
+            - "end_datetime" (str): End datetime filter for posts.
+            - "bucket" (str): AWS S3 bucket name for storing extracted data.
+        context (object): AWS Lambda context object providing runtime and execution details.
+    
+    Returns:
+        dict: A response dictionary containing:
+            - "statusCode" (int): HTTP-like status code (200 for success, 500 for error).
+            - "body" (dict): Contains details of the operation, including:
+                - "success" (bool): True if the crawl and upload were successful.
+                - "end_time" (str): ISO 8601 timestamp indicating when the process completed.
+                - "duration" (float): Execution duration in seconds.
+                - "car_id" (str): Car identifier from the event.
+                - "date" (str): Date string from the event.
+                - "batch" (str/int): Batch identifier.
+                - "start_datetime" (str): Start datetime filter.
+                - "end_datetime" (str): End datetime filter.
+                - "attempted_posts_count" (int): Total number of posts attempted.
+                - "extracted_posts_count" (int): Count of successfully processed posts.
+                - "error" (str, optional): Error message if an exception was encountered.
     """
     start_time = time.time()
     car_id = event["car_id"]

@@ -25,21 +25,34 @@ SEARCH_URL_TITLE = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=s
 SEARCH_URL_TITLE_AND_CONTENT = f"https://gall.dcinside.com/board/lists/?id=car_new1&s_type=search_subject_memo&s_keyword="  
 
 def convert_date_format(date_str):
-    """YY.MM.DD 형식을 YY-MM-DD 형식으로 변환합니다."""
+    """
+    Converts a date string from 'YY.MM.DD' format to 'YY-MM-DD' format.
+    
+    Args:
+        date_str (str): Date string formatted as 'YY.MM.DD'.
+    
+    Returns:
+        str: Date string formatted as 'YY-MM-DD'.
+    
+    Example:
+        >>> convert_date_format("23.02.15")
+        '23-02-15'
+    """
     year, month, day = date_str.split('.')
     return f"{year}-{month}-{day}"
 
 def is_date_in_range(date_str, start_date_str, end_date_str):
     """
-    주어진 날짜 문자열이 특정 날짜 범위 안에 있는지 확인합니다 (dateutil 사용).
-
-    Args:
-        date_str: 검사할 날짜 문자열 (예: '23.08.17')
-        start_date_str: 시작 날짜 문자열 (예: '2023-08-16')
-        end_date_str: 종료 날짜 문자열 (예: '2023-11-16')
-
-    Returns:
-        bool: 날짜가 범위 안에 있으면 True, 아니면 False
+    주어진 날짜 문자열이 시작 및 종료 날짜 범위 내에 있는지 확인합니다.
+    
+    매개변수:
+        date_str (str): 검사할 날짜 문자열. 형식은 '%y.%m.%d' (예: '23.08.17').
+        start_date_str (str): 시작 날짜 문자열. dateutil.parser로 파싱 가능한 형식 (예: '2023-08-16').
+        end_date_str (str): 종료 날짜 문자열. dateutil.parser로 파싱 가능한 형식 (예: '2023-11-16').
+    
+    반환:
+        bool: date_str의 날짜가 start_date_str와 end_date_str 사이(포함)에 있을 경우 True를,
+              형식 오류 등으로 파싱에 실패한 경우 False를 반환합니다.
     """
     try:
         # dateutil을 사용하여 날짜 문자열을 datetime 객체로 변환
@@ -60,6 +73,22 @@ class DC_crawler:
     ]
     
     def __init__(self, s_date, e_date, car_id, car_keyword):
+        """
+        Initialize a DC_crawler instance with given dates, car ID, and search keyword.
+        
+        Args:
+            s_date (str): Start date for crawling posts.
+            e_date (str): End date for crawling posts.
+            car_id (str): Identifier for the specific car board.
+            car_keyword (str): Keyword used to generate the search URL.
+        
+        Attributes:
+            start_date (str): Assigned start date.
+            end_date (str): Assigned end date.
+            car_id (str): Assigned car identifier.
+            keyword (str): Assigned search keyword.
+            search_url (str): URL obtained by concatenating SEARCH_URL_TITLE and car_keyword.
+        """
         self.start_date = s_date
         self.end_date = e_date
         self.car_id = car_id
@@ -71,6 +100,21 @@ class DC_crawler:
         # chrome_path = "/opt/chrome/chrome-headless-shell-mac-arm64"
         # driver_path = "/opt/chromedriver"   
 
+        """
+        Initializes and returns a headless Chrome WebDriver instance.
+        
+        Configures Chrome WebDriver with options optimized for headless browsing:
+        - Activates headless mode.
+        - Disables sandbox, GPU, and shared memory usage.
+        - Sets a custom user-agent string.
+        - Specifies a fixed window size.
+        
+        Note:
+            Local execution might require adjusting binary locations and driver paths.
+        
+        Returns:
+            webdriver.Chrome: A configured Chrome WebDriver ready for use.
+        """
         options = webdriver.ChromeOptions()
         # options.binary_location = chrome_path  # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
         options.add_argument("--headless")  # Headless 모드
@@ -88,6 +132,24 @@ class DC_crawler:
         return driver
     
     def get_entry_point(self, driver:webdriver.Chrome, url):
+        """
+        Returns the current page URL after performing a date-based search.
+        
+        Navigates to the specified URL with the provided WebDriver, opens the date picker,
+        inputs the target end date, triggers the search, waits for the results to load, and
+        retrieves the resulting page URL.
+        
+        Args:
+            driver (webdriver.Chrome): Configured Selenium Chrome WebDriver instance.
+            url (str): The URL to open where the search operation will be executed.
+        
+        Returns:
+            str: The URL of the current page after executing the search operation.
+        
+        Raises:
+            selenium.common.exceptions.TimeoutException: If any expected page element fails to
+                become clickable or present within the allotted time.
+        """
         s_date = self.start_date
         e_date = self.end_date
         
@@ -137,7 +199,20 @@ class DC_crawler:
         
     def crawl_post_link(self, soup:BeautifulSoup, cur_date:str):
         """
-        현재 페이지에서 게시글들의 링크를 수집합니다.
+        Extracts and collects post links from the provided page HTML based on a configured date range.
+        
+        Iterates through rows representing posts, verifies each post's date against the start and end dates,
+        and appends valid post details (URL, ID, and date) to the crawler's post_link list. Logs whenever the
+        current processing date changes, and terminates further processing by returning False if a post's date
+        falls outside the allowed range.
+        
+        Args:
+            soup (BeautifulSoup): Parsed HTML content containing post entries.
+            cur_date (str): Reference date for grouping posts during processing.
+        
+        Returns:
+            str or bool: Returns the last processed post date as a string if every post is within the date range;
+            returns False immediately upon encountering a post with an out-of-range date.
         """
         posts = soup.select("tr.ub-content.us-post")
         
@@ -169,9 +244,20 @@ class DC_crawler:
     
     def page_traveler(self, driver:webdriver.Chrome, current_link:str):
         """
-        페이징 박스를 순회합니다.
-        시간 역순으로 순회합니다. 
-        (페이징 박스는 정방향 순회, 보이는 게시글은 시간 역순)
+        Traverse pagination boxes in reverse chronological order.
+        
+        Navigates through paginated pages by loading each page using the provided
+        URL, extracting post links within the specified date range, and advancing to
+        the next page based on the pagination controls. A random delay is applied
+        between page loads to mimic human browsing behavior. Iteration stops once
+        no valid post date is encountered.
+        
+        Args:
+            driver (webdriver.Chrome): The Selenium WebDriver instance used for navigation.
+            current_link (str): The URL of the current pagination page to start traversing.
+        
+        Returns:
+            None.
         """
         random_sleep_time = [0.8, 0.6, 0.7, 0.5]
         cur_date = self.end_date
@@ -208,8 +294,17 @@ class DC_crawler:
     
     def get_html_of_post(self, url:str):
         """
-        각 게시글의 html source를 가져옵니다.
-        가져온 source를 반환합니다.
+        Retrieves the HTML content of a forum post.
+        
+        Performs an HTTP GET request on the specified URL using a custom User-Agent header and retries up to MAX_TRY times
+        if a successful response (status code 200) is not received. Logs errors and waits RETRY_WAITS seconds between attempts.
+        
+        Args:
+            url (str): The URL of the post to fetch.
+        
+        Returns:
+            str: The HTML source of the post if the request is successful.
+            bool: False if all retry attempts fail.
         """
         headers = {'User-Agent': "Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)"}
         for _ in range(self.MAX_TRY):
@@ -227,6 +322,21 @@ class DC_crawler:
         return False
             
     def save_html(self, html_source:str, post_info:dict):
+        """
+        Saves HTML content and associated post information to a JSON file.
+        
+        Constructs a file path using the car identifier, the post's date (formatted via convert_date_format),
+        and the post's ID, then saves the HTML content along with the post URL in a structured JSON file.
+        If the target directories do not exist, they are created. Any errors during file writing are caught
+        and printed.
+         
+        Args:
+            html_source (str): HTML content of the post.
+            post_info (dict): Dictionary containing post details with the following keys:
+                - 'date': The date string of the post.
+                - 'id': The unique identifier of the post.
+                - 'url': The URL of the post.
+        """
         file_path = f"extracted/{self.car_id}/{convert_date_format(post_info['date'])}/raw/dcinside/{post_info['id']}.json"
         directory = os.path.dirname(file_path)
         
@@ -249,6 +359,18 @@ class DC_crawler:
             
     def run_crawl(self,):
         # 드라이버 세팅
+        """
+        Orchestrates the complete crawling process to collect and save post HTML.
+        
+        Initializes the Selenium WebDriver in headless mode, navigates to the search URL to
+        access the latest posts within the specified date range, and iterates through paginated
+        results to gather valid post links. For each collected post, the HTML content is fetched
+        with retry logic and saved to a JSON file. A dynamic delay is inserted between requests to
+        avoid overloading the server.
+        
+        Returns:
+            None.
+        """
         driver=self._get_driver()
         logger.info("✅ Driver Successfully Set.")
         

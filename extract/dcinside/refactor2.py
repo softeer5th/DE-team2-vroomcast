@@ -24,18 +24,39 @@ SEARCH_URL_TITLE_AND_CONTENT = f"https://gall.dcinside.com/board/lists/?id=car_n
 
 def convert_date_format(date_str):
     # date_str = str(md_to_ymd(date_str))
+    """
+    Converts a date string to a standardized date format.
+    
+    Extracts the date portion (ignoring any time component) from the input string and
+    replaces periods ('.') with hyphens ('-'). For example, "2024.10.30 12:00:00" becomes "2024-10-30".
+    
+    Args:
+        date_str (str): The input date string, potentially including time data.
+    
+    Returns:
+        str: The date portion of the input string with periods replaced by hyphens.
+    """
     return str(date_str).split(' ')[0].replace('.', '-')
 
 def md_to_ymd(date_str:str):
     """
-    두 가지 날짜 형식을 입력받아 "yyyy.mm.dd HH:MM:SS" 형식으로 변환합니다.
-    본문 및 댓글의 날짜 형식에 대응합니다.
+    입력된 날짜 문자열을 "yyyy.mm.dd HH:MM:SS" 형식으로 변환합니다.
+    
+    지원하는 날짜 형식:
+      - "yyyy.mm.dd HH:MM:SS": 변환 없이 원본 문자열 그대로 반환.
+      - "mm.dd HH:MM:SS": 현재 연도를 적용하여 "yyyy.mm.dd HH:MM:SS" 형식으로 변환.
     
     Args:
-        date_str: 변환할 날짜 문자열 ("yyyy.mm.dd HH:MM:SS" 또는 "mm.dd HH:MM:SS" 형식)
-
+        date_str (str): 변환할 날짜 문자열. 지원 형식은 "yyyy.mm.dd HH:MM:SS" 또는 "mm.dd HH:MM:SS"입니다.
+    
     Returns:
-        "yyyy.mm.dd HH:MM:SS" 형식으로 변환된 날짜 문자열
+        str: "yyyy.mm.dd HH:MM:SS" 형식의 날짜 문자열. 입력 형식이 지원되지 않을 경우 "Invalid date format"를 반환.
+    
+    Examples:
+        >>> md_to_ymd("2024.12.31 23:59:59")
+        "2024.12.31 23:59:59"
+        >>> md_to_ymd("12.31 23:59:59")
+        "2025.12.31 23:59:59"
     """
     try:
         # "yyyy.mm.dd HH:MM:SS" 형식인 경우 그대로 반환
@@ -50,6 +71,20 @@ def md_to_ymd(date_str:str):
             return "Invalid date format"
 
 def date_type_for_search_result(date_str):
+    """
+    Parse a date string into a datetime object using supported formats.
+    
+    Attempts to interpret the input as "mm.dd" (with the current year) or "yy.mm.dd".
+    Returns a datetime object if the string matches one of these formats; otherwise,
+    returns the string "Invalid Date Format".
+    
+    Args:
+        date_str (str): Date string in "mm.dd" or "yy.mm.dd" format.
+    
+    Returns:
+        datetime.datetime or str: A datetime object if parsing is successful,
+        or "Invalid Date Format" if neither format is matched.
+    """
     try:
         # 'mm.dd' 형식 처리
         date_obj = datetime.strptime(date_str, "%m.%d")
@@ -67,16 +102,20 @@ def date_type_for_search_result(date_str):
 
 def is_date_in_range(date, start_date_str, end_date_str):
     """
-    주어진 날짜 문자열이 특정 날짜 범위 안에 있는지 확인합니다 (dateutil 사용).
-    검색 결과 목록의 날짜 형식에 대응합니다.
+    Verifies if a given date falls within the specified range.
+    
+    Parses the start and end dates from strings formatted as "YYYY-MM-DD" and
+    checks whether the provided date (a datetime object) is between these dates,
+    inclusive.
     
     Args:
-        date_str: 검사할 날짜 문자열 (예: '23.08.17' | '02.15')
-        start_date_str: 시작 날짜 문자열 (예: '2023-08-16')
-        end_date_str: 종료 날짜 문자열 (예: '2023-11-16')
-
+        date (datetime.datetime): Date to validate.
+        start_date_str (str): Start date as a string in "YYYY-MM-DD" format.
+        end_date_str (str): End date as a string in "YYYY-MM-DD" format.
+    
     Returns:
-        bool: 날짜가 범위 안에 있으면 True, 아니면 False
+        bool: True if the date is within the range; False if it is outside the range.
+        str: "Invalid Date Format" if either start_date_str or end_date_str cannot be parsed.
     """
 
 
@@ -91,14 +130,14 @@ def is_date_in_range(date, start_date_str, end_date_str):
     
 def is_time_in_range(time_str, batch_time):
   """
-  입력된 시간 문자열이 현재 시간과 현재 시간의 6시간 전 사이에 있는지 판단하는 함수.
-
+  Checks whether a given time is within the range from six hours before to the reference time.
+  
   Args:
-    time_str: "%Y-%m-%d %H:%M:%S" 형식의 시간 문자열.
-
+      time_str (str): A time string in the format "%Y-%m-%d %H:%M:%S" representing the time to check.
+      batch_time (str): A reference time string in the format "%Y-%m-%d %H:%M:%S" used as the upper bound.
+  
   Returns:
-    True: 입력된 시간이 현재 시간과 현재 시간의 6시간 전 사이에 있는 경우.
-    False: 입력된 시간이 현재 시간과 현재 시간의 6시간 전 사이에 없는 경우.
+      bool: True if time_str is between (batch_time - 6 hours) and batch_time, False otherwise.
   """
 
   try:
@@ -120,6 +159,20 @@ class DC_crawler:
     ]
     
     def __init__(self, s_date, e_date, car_id, car_keyword, is_daily_batch):
+        """
+        Initializes the DC_crawler instance with search parameters.
+        
+        Args:
+            s_date (str): The desired start date for crawling (e.g., "yyyy-mm-dd").
+            e_date (str): The desired end date for crawling (e.g., "yyyy-mm-dd").
+            car_id (str): Identifier for the target car.
+            car_keyword (str): Keyword related to the car to build the search URL.
+            is_daily_batch (bool): If True, overrides s_date and e_date to the current date.
+        
+        Side Effects:
+            Constructs the search URL by concatenating a global base URL with the car_keyword.
+            When is_daily_batch is True, sets both start_date and end_date to the current date.
+        """
         self.start_date = s_date
         self.end_date = e_date
         self.car_id = car_id
@@ -135,6 +188,16 @@ class DC_crawler:
         # chrome_path = "/opt/chrome/chrome-headless-shell-mac-arm64"
         # driver_path = "/opt/chromedriver"   
 
+        """
+        Configures and returns a headless Chrome WebDriver with custom options.
+        
+        Sets up a Selenium Chrome WebDriver using ChromeOptions for headless operation, no sandbox,
+        disabled GPU, a specific user-agent, and a fixed window size. Commented sections indicate alternative
+        configurations for local execution.
+            
+        Returns:
+            webdriver.Chrome: A headless Chrome WebDriver instance initialized with the specified options.
+        """
         options = webdriver.ChromeOptions()
         # options.binary_location = chrome_path  # Chrome 실행 파일 지정 (로컬 실행 시 주석 처리)
         options.add_argument("--headless")  # Headless 모드
@@ -152,6 +215,26 @@ class DC_crawler:
         return driver
     
     def get_entry_point(self, driver:webdriver.Chrome, url):
+        """
+        Navigates to the target URL and applies a date filter to load search results.
+        
+        Opens the webpage provided by the URL, clicks the date picker button, and waits
+        for its appearance. Sets the search date using the crawler's end_date attribute,
+        submits the date using JavaScript and keystrokes, and then clicks the search
+        button. After a short wait for results to load, returns the URL of the current
+        page containing the search results.
+        
+        Args:
+            driver (webdriver.Chrome): Selenium Chrome WebDriver instance.
+            url (str): The URL to navigate to for initiating the date filter search.
+        
+        Returns:
+            str: The URL of the loaded page after executing the search action.
+        
+        Raises:
+            TimeoutException: If essential elements (date picker, date input, or search
+                              button) are not found within the specified wait durations.
+        """
         s_date = self.start_date
         e_date = self.end_date
         
@@ -201,7 +284,22 @@ class DC_crawler:
         
     def crawl_post_link(self, soup:BeautifulSoup, cur_date:str):
         """
-        현재 페이지에서 게시글들의 링크를 수집합니다.
+        Extracts and processes post links from the current page's HTML.
+        
+        Scans the provided BeautifulSoup object for post entries identified by the "tr.ub-content.us-post" selector.
+        For each post, the method extracts the date from the designated element and converts it using a helper function.
+        It then checks whether the date falls within the allowed range defined by the crawler's start_date and end_date.
+        If a post's date is out of range, the method logs the event and returns False immediately.
+        Otherwise, it updates the current date if a new date is encountered, extracts the post's unique ID and URL,
+        constructs a dictionary with these details, and appends it to the crawler's post_link list.
+        
+        Args:
+            soup (BeautifulSoup): Parsed HTML content of the current page.
+            cur_date (str): The current date string used for tracking and logging date transitions.
+        
+        Returns:
+            Union[str, bool]: The last processed post date (formatted as a string) if posts are collected successfully,
+            or False if a post's date is found to be out of the specified range.
         """
         posts = soup.select("tr.ub-content.us-post")
         
@@ -237,9 +335,19 @@ class DC_crawler:
     
     def page_traveler(self, driver:webdriver.Chrome, current_link:str):
         """
-        페이징 박스를 순회합니다.
-        시간 역순으로 순회합니다. 
-        (페이징 박스는 정방향 순회, 보이는 게시글은 시간 역순)
+        Iterates through pagination pages to collect posts within the specified date range.
+        
+        Navigates the pages by loading the current link, parsing the HTML for post dates,
+        and then locating the next page link. The process continues until the posts fall
+        outside the desired date interval (from self.start_date to self.end_date). Random
+        delays between page loads help mimic natural browsing.
+        
+        Parameters:
+            driver (webdriver.Chrome): Selenium Chrome driver used for browser automation.
+            current_link (str): URL of the current page where pagination begins.
+        
+        Returns:
+            None.
         """
         # random_sleep_time = [0.8, 0.6, 0.7, 0.5]
         cur_date = self.end_date
@@ -276,8 +384,19 @@ class DC_crawler:
     
     def get_html_of_post(self, driver, url:str):
         """
-        각 게시글의 html source를 가져옵니다.
-        가져온 source를 반환합니다.
+        Retrieves HTML content of a post and parses it with BeautifulSoup.
+        
+        Loads the specified URL using a Selenium WebDriver instance and applies a randomized delay.
+        Retries up to MAX_TRY times if the page source cannot be parsed, logging an error on each failure.
+        Returns a BeautifulSoup object containing the parsed HTML if successful, or False if all attempts fail.
+        
+        Args:
+            driver: A Selenium WebDriver instance used to load the webpage.
+            url (str): The URL of the post to retrieve.
+        
+        Returns:
+            BeautifulSoup: Parsed HTML content if the retrieval is successful.
+            bool: False if all retry attempts fail.
         """
         headers = {'User-Agent': "Mozilla/5.0 (compatible; Daum/3.0; +http://cs.daum.net/)"}
         for _ in range(self.MAX_TRY):
@@ -296,12 +415,49 @@ class DC_crawler:
         return False
             
     def html_parser(self, driver:webdriver.Chrome, post_info:dict, parsed_post:BeautifulSoup):
+        """
+        Extracts post details, metadata, and comments from HTML content.
+        
+        Args:
+            driver (webdriver.Chrome): Selenium Chrome driver used for dynamic webpage interactions.
+            post_info (dict): Dictionary containing post metadata with keys such as 'url' and 'id'.
+            parsed_post (BeautifulSoup): Parsed HTML object of the post page.
+        
+        Returns:
+            dict: A dictionary with the extracted data including:
+                - post_id (int): Unique identifier for the post.
+                - post_url (str): URL of the post.
+                - title (str): Title of the post.
+                - content (str): Main text content of the post.
+                - created_at (str): Post creation timestamp in ISO format (YYYY-MM-DDTHH:MM:SS).
+                - view_count (int): Number of views.
+                - upvote_count (int): Count of upvotes.
+                - downvote_count (int): Count of downvotes.
+                - comment_count (int): Total number of comments.
+                - comments (list[dict]): List of comment dictionaries containing details such as comment_id, content, 
+                  reply status, creation time, and vote counts.
+        
+        Example:
+            >>> result = instance.html_parser(driver, {"url": "http://example.com/post/1", "id": 1}, soup)
+            >>> print(result["title"])
+        """
         print("Now Watching : " , driver.current_url)
         def parse_main_content(target_element):
             """
-            게시글 본문 크롤링
+            Extracts post content along with upvote and downvote counts from an HTML element.
+            
+            Locates the container for the post content, retrieving the text with line breaks preserved.
+            Also extracts the upvote count from the element with classes "up_num font_red" and
+            the downvote count from the element with class "down_num", converting both to integers.
+            
+            Args:
+                target_element (bs4.element.Tag): The BeautifulSoup element containing the post details.
+            
             Returns:
-                본문 내용, 추천 수, 비추 수
+                tuple: A tuple of three elements:
+                    - content (str): The text content of the post with HTML line breaks converted to newlines.
+                    - upvote (int): The number of upvotes.
+                    - downvote (int): The number of downvotes.
             """
             write_div = target_element.find("div", class_="write_div")
             gaechu = int(target_element.find("p", class_="up_num font_red").get_text(strip=True))
@@ -311,13 +467,24 @@ class DC_crawler:
 
         def parse_comments(soup:BeautifulSoup):
             """
-            댓글 및 대댓글을 수집하여 리스트로 반환하는 함수.
+            댓글 및 대댓글 정보를 추출하여 리스트로 반환한다.
+            
+            HTML 파싱 결과 BeautifulSoup 객체로부터 댓글 및 대댓글을 찾아 각 항목을
+            딕셔너리로 수집한다. 수집되는 딕셔너리는 다음 키를 포함한다:
+                - comment_id (int): 댓글 또는 대댓글의 고유 식별자. 대댓글은 상위 댓글의 ID 사용.
+                - content (str): 댓글 또는 대댓글의 텍스트 내용.
+                - is_reply (int): 댓글은 0, 대댓글은 1.
+                - created_at (str): ISO 8601 형식("yyyy-mm-ddThh:mm:ss")으로 변환된 작성 시간.
+                - upvote_count (int): 추천 수, 기본값은 0.
+                - downvote_count (int): 비추천 수, 기본값은 0.
+            
+            광고 댓글(클래스에 "dory" 포함)은 제외된다.
             
             Args:
-                soup (BeautifulSoup): BeautifulSoup으로 파싱된 HTML
+                soup (BeautifulSoup): HTML이 파싱된 BeautifulSoup 객체.
             
             Returns:
-                list[dict]: 댓글과 대댓글을 포함한 리스트
+                list[dict]: 댓글과 대댓글 정보를 포함한 딕셔너리 리스트.
             """
             comment_list = []
             comment_ul = soup.find("ul", class_="cmt_list")
@@ -388,7 +555,20 @@ class DC_crawler:
 
         def scrape_all_comment_pages(driver, soup):
             """
-            주어진 soup을 기반으로 댓글 페이지를 순회하며 모든 댓글을 수집하는 함수.
+            Aggregates all comments across paginated comment pages.
+            
+            Extracts the total number of comments from the initial BeautifulSoup object and collects comments from the
+            first page using a helper function. If pagination is found, iterates over each numeric page button by executing
+            its JavaScript to load subsequent comment pages, waits for the new content to load, and accumulates the comments.
+            
+            Args:
+                driver (webdriver.Chrome): Selenium WebDriver used to execute JavaScript and navigate between pages.
+                soup (BeautifulSoup): Parsed HTML content of the initial comment page.
+            
+            Returns:
+                tuple:
+                    int: The total comment count as indicated on the page.
+                    list: A list of comments collected from all paginated comment pages.
             """
             comment_count_tag = soup.find('span', class_='gall_comment')
             comment_count = int(comment_count_tag.find('a').text[len("댓글 "):]) if comment_count_tag else 0
@@ -457,6 +637,22 @@ class DC_crawler:
         return parsed_finally
     
     def save_json(self, parsed_json:json, post_info:dict):
+        """
+        Saves parsed JSON data to a file in a structured directory based on car ID and post date.
+        
+        Args:
+            parsed_json (json): The JSON data to be saved.
+            post_info (dict): Metadata dictionary that must include:
+                - 'date': A date string where the substring from index 5 is used to form the directory.
+                - 'id': A unique identifier used as the JSON file name.
+        
+        The file path is formatted as:
+          "extracted/{car_id}/{file_date}/raw/dcinside/{id}.json",
+        where {file_date} is derived from the 'date' string in post_info.
+        
+        Directories are created if they do not exist. Any exceptions during the file write
+        are caught and logged; no exception is propagated.
+        """
         file_date = post_info['date'][5:]
         file_path = f"extracted/{self.car_id}/{file_date}/raw/dcinside/{post_info['id']}.json"
         directory = os.path.dirname(file_path)
@@ -476,6 +672,14 @@ class DC_crawler:
         
     def run_crawl(self,):
         # 드라이버 세팅
+        """
+        Execute the complete crawl sequence.
+        
+        Initializes the Selenium driver and navigates to the search entry URL within the specified date range.
+        Collects valid post links by traversing the pagination, retrieves each post's HTML content, parses the
+        required details, and saves the extracted data in JSON format. A randomized delay between posts is used
+        to emulate natural browsing behavior.
+        """
         driver=self._get_driver()
         logger.info("✅ Driver Successfully Set.")
         

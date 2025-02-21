@@ -77,7 +77,24 @@ class SentimentAnalysis(BaseModel):
 
 def analyze_sentiments(sentences):
     # return [ random.randint(-1,1) for _ in range(len(sentences))]
-    """OpenAI API를 Batch로 호출하여 감성 분석 후 숫자 배열로 반환"""
+    """
+    주어진 한국어 문장 목록에 대해 Batch로 감성 분석을 수행합니다.
+    
+    입력된 문장들을 긍정(1), 부정(-1), 또는 중립(0)으로 분류하며, 각 문장에 해당하는 감성 점수를 숫자 리스트로 반환합니다. 응답 배열의 길이가 입력 문장 수와 일치하지 않거나 에러가 발생할 경우, 기본값(0)으로 채운 리스트를 반환합니다.
+    
+    인자:
+        sentences (list[str]): 감성 분석 대상 한국어 문장 리스트. None 또는 빈 리스트일 경우 빈 리스트를 반환.
+    
+    반환:
+        list[int]: 각 문장에 대한 감성 점수 리스트. 1은 긍정, -1은 부정, 0은 중립을 의미하며, 입력 문장 수와 동일한 길이를 갖습니다.
+    
+    예외 처리:
+        - OpenAI API 호출 중 RateLimitError 발생 시 최대 10회까지 지수적 백오프(1.5^시도 횟수)를 적용하여 재시도합니다.
+        - 기타 예외 발생 시 에러를 로깅하고 기본값(0)으로 채운 리스트를 반환합니다.
+    
+    참고:
+        - 환경 변수 OPENAI_API_KEY가 설정되어 있어야 합니다.
+    """
     if sentences is None or len(sentences) == 0:
         return []
 
@@ -140,6 +157,32 @@ def analyze_sentiments(sentences):
     ])
 ))
 def get_sentences(source_id: pd.Series, title: pd.Series, content: pd.Series) -> pd.Series:
+    """
+    Extracts sentences from title and content and assigns unique identifiers.
+    
+    Splits the text in the title and content columns into sentences using kss. For each row, sentences from the title are obtained first (if available), followed by those from the content. Each sentence is paired with a unique identifier, which combines the source identifier with the sentence index, and a flag indicating if the sentence is from the title (True if a title is provided, else False).
+    
+    Args:
+        source_id (pd.Series): Series of identifiers for each text row.
+        title (pd.Series): Series containing title text to be segmented into sentences.
+        content (pd.Series): Series containing content text to be segmented into sentences.
+    
+    Returns:
+        pd.Series: A Series where each element is a list of tuples. Each tuple contains:
+            - str: A unique sentence identifier formatted as "source_id_index".
+            - str: The segmented sentence.
+            - bool: True if the sentence originates from the title, False otherwise.
+    
+    Example:
+        >>> import pandas as pd
+        >>> source_id = pd.Series([101, 102])
+        >>> title = pd.Series(["Hello world", ""])
+        >>> content = pd.Series(["This is a test.", "Content for second row."])
+        >>> get_sentences(source_id, title, content)
+        0    [(101_0, 'Hello world', True), (101_1, 'This is a test.', True)]
+        1    [(102_0, 'Content for second row.', False)]
+        dtype: object
+    """
     results = []
     for source_id, title, content in zip(source_id, title, content):
         result_per_content = []
@@ -161,7 +204,34 @@ def get_sentences(source_id: pd.Series, title: pd.Series, content: pd.Series) ->
     ), True)
 ]))
 def extract_sentiment_category_keyword(sentences: pd.Series) -> pd.Series:
-    """KSS로 문장을 분리하고, 키워드를 찾은 후 튜플을 반환"""
+    """
+    Extracts sentiment scores and associated keyword categories from each sentence.
+    
+    Processes a pandas Series of sentences by batching them (batch size = 20) and performing sentiment
+    analysis via an external API. For each sentence, the text is transformed to uppercase to facilitate
+    keyword matching against a pre-defined keyword dictionary. For every detected keyword, a dictionary
+    with keys "category" and "keyword" is recorded. The output is a DataFrame with each sentence’s sentiment
+    and a list of its matched keyword-category pairs.
+    
+    Args:
+        sentences (pd.Series): A Series of sentence strings to be analyzed.
+    
+    Returns:
+        pd.DataFrame: A DataFrame with two columns:
+            - "sentiment": The sentiment score or classification returned by the sentiment analysis.
+            - "categories_keywords": A list of dictionaries, each containing a detected keyword and its category.
+    
+    Example:
+        >>> import pandas as pd
+        >>> sentences = pd.Series([
+        ...     "The design is sleek and modern.",
+        ...     "가격이 합리적입니다."
+        ... ])
+        >>> extract_sentiment_category_keyword(sentences)
+             sentiment                      categories_keywords
+        0  positive   [{'category': 'design', 'keyword': 'DESIGN'}]
+        1  positive    [{'category': 'price', 'keyword': '가격'}]
+    """
     results = []  # 최종 반환 값 저장
     BATCH_SIZE = 20  # Batch 크기 설정
 
@@ -190,11 +260,49 @@ def extract_sentiment_category_keyword(sentences: pd.Series) -> pd.Series:
 
 # 링크 필터링, 유저 필터링
 def regex_replace_privacy(df):
+    """
+    Replaces URLs and user mentions in the "content" column of a Spark DataFrame.
+    
+    Performs two regex-based replacements on the "content" column:
+    1. Removes any substring that matches a URL pattern (http:// or https://).
+    2. Removes any substring that matches a user mention pattern starting with '@' followed by alphanumeric or Korean characters.
+    
+    Args:
+        df (pyspark.sql.DataFrame): DataFrame containing a "content" column to sanitize.
+    
+    Returns:
+        pyspark.sql.DataFrame: Modified DataFrame with URLs and user mentions removed from the "content" column.
+    """
     df = df.withColumn("content", regexp_replace(col("content"), r'https?://\S+', ''))
     df = df.withColumn("content", regexp_replace(col("content"), r'@[\w\uac00-\ud7af]+', ''))
     return df
 
 def transform_static_data(post_df, comment_df):
+    """
+    Transforms and writes posts and comments for sentiment analysis.
+    
+    Removes privacy-sensitive content from both posts and comments, extracts sentences using a UDF,
+    applies sentiment analysis and keyword extraction on each sentence, and writes the processed data
+    to multiple parquet files. The function processes posts and comments separately by:
+      - Replacing URLs and user mentions using `regex_replace_privacy`.
+      - Extracting sentences via the `get_sentences` UDF (with posts using the title and content, and
+        comments having a null title).
+      - Combining sentence-level data from posts and comments.
+      - Analyzing each sentence using the `extract_sentiment_category_keyword` UDF to obtain sentiment scores
+        and category keywords.
+      - Caching the intermediate sentence DataFrame to improve performance.
+    
+    The results are written to output paths constructed using global variables (e.g., `mode`, `bucket`,
+    `output_dir`), with separate outputs for post static data, comment static data, sentence-level data,
+    and keyword-category mappings. Logging is performed at each major write operation.
+        
+    Args:
+        post_df (DataFrame): Spark DataFrame containing posts with fields like id, title, content, created_at.
+        comment_df (DataFrame): Spark DataFrame containing comments with fields like id, content, created_at.
+    
+    Side Effects:
+        Outputs parquet files under directories for posts, comments, sentences, and keyword categories.
+    """
     post_df = regex_replace_privacy(post_df)
     comment_df = regex_replace_privacy(comment_df)
     post_pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")

@@ -32,6 +32,31 @@ class SentimentAnalysis(BaseModel):
     )
 
 def request_openai_api(full_prompt, len_batch_sentences, client, max_retries=10):
+    """
+    Sends a prompt to the OpenAI API to classify the sentiment of Korean sentences.
+    
+    Constructs and sends a chat completion request to the OpenAI API using a system prompt that instructs the model to classify each sentence as positive (1), negative (-1), or neutral (0). If the number of sentiment scores returned does not match the expected count or if an error occurs, a default list of zeros is returned. The function retries on rate limit errors using an exponential backoff strategy.
+    
+    Args:
+        full_prompt (str): The user prompt containing sentences to analyze.
+        len_batch_sentences (int): Expected number of sentiment scores (i.e., number of sentences).
+        client: An OpenAI API client instance that supports the beta chat completions interface.
+        max_retries (int, optional): Maximum number of retry attempts on encountering rate limits.
+            Defaults to 10.
+    
+    Returns:
+        list[int]: A list of sentiment scores corresponding to the input sentences. Returns a
+        default list of zeros if the response is invalid or an error occurs.
+    
+    Example:
+        >>> sentiments = request_openai_api(prompt, 5, openai_client)
+        >>> print(sentiments)
+        [1, 0, -1, 1, 0]
+        
+    Note:
+        API rate limit errors trigger retries with an exponential backoff delay. Other exceptions
+        are logged and result in the default sentiment list.
+    """
     for attempt in range(max_retries):
         print(f"Attempt {attempt + 1}/{max_retries}...")
         try:
@@ -65,7 +90,18 @@ def request_openai_api(full_prompt, len_batch_sentences, client, max_retries=10)
     return [0] * len_batch_sentences
 
 def analyze_sentiments(client, sentences):
-    """OpenAI API를 Batch로 호출하여 감성 분석 후 숫자 배열로 반환"""
+    """
+    Performs batch-based sentiment analysis on a list of sentences.
+    
+    Divides the provided sentences into batches defined by the global constant BATCH_SIZE and generates a prompt for each batch to classify the sentiment of each sentence as positive (1), negative (-1), or neutral (0). The prompt instructs the OpenAI API to return an array of sentiment scores matching the number of sentences in the batch. If the input list is empty or None, returns an empty list.
+    
+    Args:
+        client: OpenAI API client used to perform the sentiment analysis request.
+        sentences (List[str]): List of sentences to analyze.
+    
+    Returns:
+        List[int]: A list of sentiment scores corresponding to each input sentence.
+    """
     total_sentiments = []
     if sentences is None or len(sentences) == 0:
         return []
@@ -92,7 +128,21 @@ def analyze_sentiments(client, sentences):
     return total_sentiments
 
 def process_parquet(bucket_name, input_key, output_key):
-    """S3에서 Parquet 데이터를 읽어 처리 후 sentiment 컬럼 추가 후 저장"""
+    """
+    S3에서 Parquet 파일을 읽어 감정 분석 결과를 저장합니다.
+    
+    Args:
+    	bucket_name (str): S3 버킷 이름.
+    	input_key (str): 입력 Parquet 파일의 S3 키.
+    	output_key (str): 처리된 파일을 저장할 S3 키.
+    
+    Raises:
+    	ValueError: DataFrame에 'sentence' 컬럼이 없을 경우 발생.
+    
+    Side Effects:
+    	입력 Parquet 파일을 S3에서 읽은 후 문장에 대한 감정 분석을 수행하고,
+    	새로운 sentiment 컬럼을 추가하여 결과 파일을 S3에 업로드합니다.
+    """
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     # S3에서 Parquet 파일 읽기
     obj = s3_client.get_object(Bucket=bucket_name, Key=input_key)
@@ -127,7 +177,19 @@ def process_parquet(bucket_name, input_key, output_key):
     logger.info(f"처리 결과를 S3에 저장 완료: s3://{bucket_name}/{output_key}")
 
 def process_all_files(bucket_name, input_prefix, output_prefix):
-    """S3에서 특정 prefix에 해당하는 모든 Parquet 파일 처리"""
+    """
+    S3 버킷 내 특정 프리픽스의 모든 Parquet 파일을 처리합니다.
+    
+    Args:
+        bucket_name (str): S3 버킷의 이름.
+        input_prefix (str): 처리할 Parquet 파일들이 위치한 S3 객체 키의 프리픽스.
+        output_prefix (str): 처리된 파일을 저장할 S3 객체 키의 프리픽스.
+            입력 프리픽스를 해당 출력 프리픽스로 대체하여 파일 이름을 재정의합니다.
+    
+    파일 목록을 페이지 단위로 조회하며, 각 페이지 내에서 .parquet 확장자로 끝나는 파일에 대해
+    `process_parquet` 함수를 호출합니다. 파일 처리 중 오류가 발생하면 에러 로그를 기록하며,
+    지정된 프리픽스에 파일이 없으면 경고 로그를 남깁니다.
+    """
     paginator = s3_client.get_paginator("list_objects_v2")
     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=input_prefix)
 
@@ -149,7 +211,36 @@ def process_all_files(bucket_name, input_prefix, output_prefix):
             logger.warning(f"{input_prefix} 하위에 파일이 없습니다.")
 
 def lambda_handler(event, context):
-    """Lambda 함수의 엔트리포인트"""
+    """
+    Entry point for AWS Lambda handling sentiment analysis on S3 Parquet files.
+    
+    Extracts S3 bucket, input directory, and output directory information from the event,
+    processes the Parquet files for sentiment analysis, and stores the results to the 
+    specified S3 output directory. Returns a response with an HTTP status code and a message
+    indicating the outcome of the operation.
+    
+    Args:
+        event (dict): AWS Lambda event containing the following keys:
+            - 'bucket_name' (str): Name of the S3 bucket to process.
+            - 'input_dir' (str): Directory in the S3 bucket containing the input Parquet files.
+            - 'output_dir' (str): Directory in the S3 bucket where the processed files will be saved.
+        context (Any): AWS Lambda context object providing runtime information (unused in this function).
+    
+    Returns:
+        dict: A dictionary with the following keys:
+            - 'statusCode' (int): 200 if processing is successful; 500 if an error occurs.
+            - 'body' (str): A message indicating either the success result with S3 path or error details.
+    
+    Example:
+        >>> event = {
+        ...     "bucket_name": "example-bucket",
+        ...     "input_dir": "input/parquet",
+        ...     "output_dir": "output/sentiment"
+        ... }
+        >>> context = {}  # AWS Lambda context placeholder
+        >>> lambda_handler(event, context)
+        {'statusCode': 200, 'body': 'Sentiment analysis completed and saved to s3://example-bucket/output/sentiment/'}
+    """
     # 이벤트에서 S3 Bucket과 Key 파라미터 추출
     bucket_name = event['bucket_name']
     input_dir = event['input_dir']
