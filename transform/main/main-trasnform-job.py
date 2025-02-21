@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
-import kss
+from kiwipiepy import Kiwi
 import pandas as pd
 import os
 import argparse
@@ -76,13 +76,18 @@ keyword_dict = {
         ), True)
     ])
 ))
-def get_sentences(source_id: pd.Series, title: pd.Series, content: pd.Series) -> pd.Series:
+def get_sentences(source_ids: pd.Series, titles: pd.Series, contents: pd.Series) -> pd.Series:
+    kiwi = Kiwi()
     results = []
-    for source_id, title, content in zip(source_id, title, content):
+    for source_id, title, content in zip(source_ids, titles, contents):
         result_per_content = []
-        sentences = kss.split_sentences(title) if title else []
-        content_sentences = kss.split_sentences(content) if content else []
-        sentences.extend(content_sentences)
+        sentences = []
+        if title:
+            for kiwi_sent in kiwi.split_into_sents(title):
+                sentences.append(kiwi_sent.text)
+        if content:
+            for kiwi_sent in kiwi.split_into_sents(content):
+                sentences.append(kiwi_sent.text)
         for idx, sentence in enumerate(sentences):
             upper_sentence = sentence.upper()  # 대문자로 변환하여 키워드 검색
             categories_keywords = []  # 각 문장의 키워드 결과 저장
