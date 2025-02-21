@@ -33,10 +33,10 @@ POST_DYNAMIC_SCHEMA = pa.schema(
     [
         pa.field("id", pa.string(), nullable=False),
         pa.field("extracted_at", pa.timestamp('s'), nullable=False),
-        pa.field("view_count", pa.int64(), nullable=True),
-        pa.field("upvote_count", pa.int64(), nullable=True),
-        pa.field("downvote_count", pa.int64(), nullable=True),
-        pa.field("comment_count", pa.int64(), nullable=True),
+        pa.field("view_count", pa.int32(), nullable=True),
+        pa.field("upvote_count", pa.int32(), nullable=True),
+        pa.field("downvote_count", pa.int32(), nullable=True),
+        pa.field("comment_count", pa.int32(), nullable=True),
     ]
 )
 
@@ -54,15 +54,15 @@ COMMENT_DYNAMIC_SCHEMA = pa.schema(
     [
         pa.field("id", pa.string(), nullable=False),
         pa.field("extracted_at", pa.timestamp('s'), nullable=False),
-        pa.field("upvote_count", pa.int64(), nullable=True),
-        pa.field("downvote_count", pa.int64(), nullable=True),
+        pa.field("upvote_count", pa.int32(), nullable=True),
+        pa.field("downvote_count", pa.int32(), nullable=True),
     ]
 )
 
 POST_CAR_SCHEMA = pa.schema(
     [
-        pa.field("car_id", pa.int64(), nullable=False),
-        pa.field("post_id", pa.int64(), nullable=False),
+        pa.field("car_id", pa.int32(), nullable=False),
+        pa.field("post_id", pa.int32(), nullable=False),
     ]
 )
 
