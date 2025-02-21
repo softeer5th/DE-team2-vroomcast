@@ -73,7 +73,6 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
     while page_number < 50:
         # URL 생성 및 요청
         search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
-        logger.info(f"Fetching URL: {search_url}")
         html_content = fetch_html(search_url)
         if not html_content:
             logger.error(f"failed to fetch {search_url}")
@@ -123,16 +122,20 @@ def lambda_handler(event, context):
     start_datetime = event["start_datetime"]
     end_datetime = event["end_datetime"]
     bucket = event["bucket"]
+    total_count = 0
+    success_count = 0
     try:
         s3 = boto3.resource("s3")
         for keyword in keywords:
             logger.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
             urls = main_crawler(keyword, start_datetime, end_datetime)
             for id, url in urls.items():
+                total_count += 1
                 html_content = fetch_html(url)
                 if not html_content:
                     logger.error(f"failed to fetch {url}")
                     continue
+                success_count += 1
                 dump_data = get_post_dict(html_content, id, url)
                 json_body = json.dumps(
                     dump_data,
@@ -140,7 +143,7 @@ def lambda_handler(event, context):
                     indent=4
                 )
                 s3.Object(bucket, f"extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json").put(Body=json_body)
-                logger.info(f"put extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json to s3")
+                logger.info(f"put extracted s3://{bucket}/extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json to s3")
                 time.sleep(random.randint(1, 3))
     except Exception as e:
         logger.error(e)
@@ -155,6 +158,9 @@ def lambda_handler(event, context):
                 "batch": batch_num,
                 "start_datetime": start_datetime,
                 "end_datetime": end_datetime,
+                "attempted_posts_count": total_count,
+                "extracted_posts_count": success_count,
+                "error": str(e)
             }
         }
     return {
@@ -168,5 +174,7 @@ def lambda_handler(event, context):
             "batch":batch_num,
             "start_datetime":start_datetime,
             "end_datetime":end_datetime,
+            "attempted_posts_count": total_count,
+            "extracted_posts_count": success_count,
         }
     }
