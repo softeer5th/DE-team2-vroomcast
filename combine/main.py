@@ -77,19 +77,16 @@ def _extract_community_from_path(path: str) -> str:
     return match.group(1)
 
 def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str, batch: int):
-    response = s3.list_objects_v2(
-        Bucket=bucket, Prefix=EXTRACTED_PATH.format(car_id=car_id, date=date, batch=batch)
-    )
-
-    if "Contents" not in response:
-        raise ValueError("No data found in the extracted directory")
-
     matched_files = []
-    for obj in response.get("Contents", []):
-        key: str = obj["Key"]
-        if key.endswith(".json"):
-            matched_files.append(key)
-
+    paginator = s3.get_paginator('list_objects_v2')
+    prefix = EXTRACTED_PATH.format(car_id=car_id, date=date, batch=batch)
+    
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key: str = obj["Key"]
+            if key.endswith(".json"):
+                matched_files.append(key)
+    
     return matched_files
 
 def read_id_set(s3: Any, bucket: str) -> set[str]:
