@@ -70,7 +70,7 @@ jobs:
           --code ImageUri=$IMAGE_URI \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
           --timeout 300 \
-          --memory-size 2048 \ 
+          --memory-size 2048 \
           --region ap-northeast-2 || \
         aws lambda update-function-code \
           --function-name $DEPLOY_LAMBDA_NAME \
