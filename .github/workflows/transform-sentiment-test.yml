@@ -102,7 +102,8 @@ jobs:
           aws lambda invoke --function-name $TEST_LAMBDA_NAME \
             --cli-binary-format raw-in-base64-out \
             --payload "${PAYLOAD}" response.json \
-            --region ap-northeast-2
+            --region ap-northeast-2 \
+            --cli-read-timeout 840
           cat response.json
           
           STATUS_CODE=$(jq '.statusCode' response.json)
