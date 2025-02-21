@@ -19,6 +19,8 @@ ID_PATH = "id_set.txt"
 POST_PATH = "combined/{car_id}/{date}/{batch}/{type}/post_{chunk}.parquet"
 COMMENT_PATH = "combined/{car_id}/{date}/{batch}/{type}/comment_{chunk}.parquet"
 
+POST_CAR_PATH = "combined/{car_id}/{date}/{batch}/post_car.parquet"
+
 POST_STATIC_SCHEMA = pa.schema(
     [
         pa.field("id", pa.string(), nullable=False),
@@ -61,8 +63,8 @@ COMMENT_DYNAMIC_SCHEMA = pa.schema(
 
 POST_CAR_SCHEMA = pa.schema(
     [
-        pa.field("car_id", pa.int32(), nullable=False),
-        pa.field("post_id", pa.int32(), nullable=False),
+        pa.field("post_id", pa.string(), nullable=False),
+        pa.field("car_id", pa.string(), nullable=False),
     ]
 )
 
@@ -116,7 +118,7 @@ def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str, batch: in
             logger.error(f"Failed to process file {path}: {str(e)}")
             raise
 
-def _split_data(data: dict, batch_datetime: str) -> tuple[dict, list[dict]]:
+def _split_data(data: dict, car_id: str, batch_datetime: str) -> tuple[dict, list[dict]]:
     community = data['community']
     post_id = f"{community}_post_{data['post_id']}"
     
@@ -137,9 +139,15 @@ def _split_data(data: dict, batch_datetime: str) -> tuple[dict, list[dict]]:
         "comment_count": data.get("comment_count", None),
     }
 
+    post_car = {
+        "post_id": post_id,
+        "car_id": car_id,
+    }
+
     post = {
         "post_static": post_static,
         "post_dynamic": post_dynamic,
+        "post_car": post_car,
     }
 
     comments = []
@@ -180,7 +188,7 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
     extracted_data = _read_extracted_data(s3, bucket, car_id, date, batch)
     id_set = read_id_set(s3, bucket)
 
-    def _upload_data(data: list[dict], schema: Any, path: str):
+    def _upload_data(data: list[dict], schema: Any, path: str) -> bool:
         try:
             table = pa.Table.from_pylist(data, schema=schema)
             
@@ -195,13 +203,20 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
         except Exception as e:
             logger.error(f"Error uploading data: {str(e)}")
             logger.info(f"")
-            return
-        
+            return False
+
+        if 'id' not in data[0]:
+            return True
+
         for item in data:
             id_set.add(item["id"])
 
+        return True
+
     chunk_idx = 0
     chunk_size = 200
+
+    post_cars = []
 
     while True:
         chunk = list(islice(extracted_data, chunk_size))
@@ -214,7 +229,7 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
         comment_dynamics = []
 
         for data in chunk:
-            post, comments = _split_data(data, batch_datetime)
+            post, comments = _split_data(data, car_id, batch_datetime)
 
             if post["post_static"]["id"] not in id_set:
                 post_statics.append(post["post_static"])
@@ -224,6 +239,10 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
                 if comment["comment_static"]["id"] not in id_set:
                     comment_statics.append(comment["comment_static"])
                 comment_dynamics.append(comment["comment_dynamic"])
+
+            post_cars.append(post["post_car"])
+        
+        logger.info(f"Post car count: {len(post_cars)}")
 
         logger.info(f"Uploading chunk {chunk_idx} for car_id: {car_id}, date: {date}")
         logger.info(f"Post statics: {len(post_statics)}, Post dynamics: {len(post_dynamics)}")
@@ -242,6 +261,11 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
             _upload_data(comment_dynamics, COMMENT_DYNAMIC_SCHEMA, COMMENT_PATH.format(car_id=car_id, date=date, batch=batch, type="dynamic", chunk=chunk_idx))
 
         chunk_idx += 1
+
+    logger.info("Post car count total: {len(post_cars)}")
+
+    if post_cars:
+        _upload_data(post_cars, POST_CAR_SCHEMA, POST_CAR_PATH.format(car_id=car_id, date=date, batch=batch))
 
     _upload_id_set(s3, bucket, id_set)
 
