@@ -74,7 +74,8 @@ jobs:
             --code ImageUri=$IMAGE_URI_WITH_DIGEST \
             --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
             --timeout 900 \
-            --region ap-northeast-2
+            --region ap-northeast-2 \
+            --environment Variables="{OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}}"
 
       - name: Wait for Lambda to be Active
         run: |
