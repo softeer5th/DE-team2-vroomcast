@@ -75,6 +75,7 @@ jobs:
           --code ImageUri=$IMAGE_URI \
           --role ${{ secrets.AWS_LAMBDA_EXECUTION_ROLE }} \
           --timeout 900 \
+          --environment Variables="{OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}}" \
           --region ap-northeast-2 || \
         aws lambda update-function-code \
           --function-name $DEPLOY_LAMBDA_NAME \
