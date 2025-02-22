@@ -109,9 +109,9 @@ def regex_replace_privacy(df):
     df = df.withColumn("content",
                    regexp_replace(col("content"), r'(?<=\s|^)@[A-Za-z0-9_가-힣\-]+', '<USER>'))
     df = df.withColumn("content",
-                       regexp_replace(col("content"), r'&nbsp;', '')) # nbsp에 대한 처리
+                       regexp_replace(col("content"), r'&nbsp;|\xa0', '')) # nbsp에 대한 처리
     df = df.withColumn("content", regexp_replace(col("content"), r'\s+', ' ')) # 연속되는 공백을 스페이스로 처리.
-    # df = df.withColumn("content", regexp_replace(col("content"), r'다.', '')
+    df = df.withColumn("content", regexp_replace(col("content"), r"([가-힣]+[.?!])(?=[가-힣0-9a-zA-Z])", r"$1 ")) # 문장이 분리되지 않는 경우를 대비한 스페이스바 추가
     return df
 
 def transform_static_data(post_df, comment_df):
