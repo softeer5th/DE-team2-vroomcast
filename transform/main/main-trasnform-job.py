@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
+from pyspark.sql.utils import AnalysisException
 from kiwipiepy import Kiwi
 import pandas as pd
 import os
@@ -104,36 +105,52 @@ def get_sentences(source_ids: pd.Series, titles: pd.Series, contents: pd.Series)
 
 # 링크 필터링, 유저 필터링
 def regex_replace_privacy(df):
-    df = df.withColumn("content", regexp_replace(col("content"), r'https?://\S+', ''))
-    df = df.withColumn("content", regexp_replace(col("content"), r'@[\w\uac00-\ud7af]+', ''))
+    df = df.withColumn("content", regexp_replace(col("content"), r'https?://\S+', '<URL>'))
+    df = df.withColumn("content",
+                   regexp_replace(col("content"), r'(?<=\s|^)@[A-Za-z0-9_가-힣\-]+', '<USER>'))
+    df = df.withColumn("content",
+                       regexp_replace(col("content"), r'&nbsp;', '')) # nbsp에 대한 처리
+    df = df.withColumn("content", regexp_replace(col("content"), r'\s+', ' ')) # 연속되는 공백을 스페이스로 처리.
+    # df = df.withColumn("content", regexp_replace(col("content"), r'다.', '')
     return df
 
 def transform_static_data(post_df, comment_df):
-    post_df = regex_replace_privacy(post_df)
-    comment_df = regex_replace_privacy(comment_df)
-    post_pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")
-    comment_pre_sentence_df = comment_df.selectExpr("id AS source_id", "CAST(NULL AS STRING) AS title", "content", "created_at")
-
-    post_sentence_df = post_pre_sentence_df.withColumn(
-        "sentences",
-        explode(
-            get_sentences(
-                col("source_id"), col("title"), col("content")
+    post_sentence_df = None
+    comment_sentence_df = None
+    if post_df is not None:
+        post_df = regex_replace_privacy(post_df)
+        post_pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")
+        post_sentence_df = post_pre_sentence_df.withColumn(
+            "sentences",
+            explode(
+                get_sentences(
+                    col("source_id"), col("title"), col("content")
+                )
             )
-        )
-    ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
-                 "sentences.sentence AS sentence", "created_at", "sentences.categories_keywords AS categories_keywords")
-    comment_sentence_df = comment_pre_sentence_df.withColumn(
-        "sentences",
-        explode(
-            get_sentences(
-                col("source_id"), col("title"), col("content")
+        ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
+                     "sentences.sentence AS sentence", "created_at",
+                     "sentences.categories_keywords AS categories_keywords")
+    if comment_df is not None:
+        comment_df = regex_replace_privacy(comment_df)
+        comment_pre_sentence_df = comment_df.selectExpr("id AS source_id", "CAST(NULL AS STRING) AS title", "content", "created_at")
+        comment_sentence_df = comment_pre_sentence_df.withColumn(
+            "sentences",
+            explode(
+                get_sentences(
+                    col("source_id"), col("title"), col("content")
+                )
             )
-        )
-    ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
-                 "sentences.sentence AS sentence", "created_at", "sentences.categories_keywords AS categories_keywords")
-    total_sentence_df = post_sentence_df.union(comment_sentence_df)
-    total_sentence_df = total_sentence_df.repartition(10)
+        ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
+                     "sentences.sentence AS sentence", "created_at", "sentences.categories_keywords AS categories_keywords")
+    if post_sentence_df is not None and comment_sentence_df is not None:
+        total_sentence_df = post_sentence_df.union(comment_sentence_df)
+    elif post_sentence_df is not None:
+        total_sentence_df = post_sentence_df
+    elif comment_sentence_df is not None:
+        total_sentence_df = comment_sentence_df
+    else:
+        total_sentence_df = None
+        return
     total_sentence_df = total_sentence_df.cache()
     sentence_df = total_sentence_df.selectExpr("id", "source_id", "from_post", "sentence", "created_at")
     keyword_category = total_sentence_df.withColumn(
@@ -178,8 +195,19 @@ if __name__ == "__main__":
     #     .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
     #     .getOrCreate()
     # print(spark.sparkContext.uiWebUrl)
-    post_df = spark.read.parquet(*s3_input_post_paths)
-    comment_df = spark.read.parquet(*s3_input_comment_paths)
+    try:
+        post_df = spark.read.parquet(*s3_input_post_paths)
+    except AnalysisException as e:
+        logger.warning(f"Post Read Error: {e}")
+        post_df = None
+    try:
+        comment_df = spark.read.parquet(*s3_input_comment_paths)
+    except AnalysisException as e:
+        logger.warning(f"Comment Read Error: {e}")
+        comment_df = None
     logger.info(f"Post and Comment Read Complete.")
+    if post_df is None and comment_df is None:
+        logger.error("There are not valid post and comment data.")
+        exit(0)
     transform_static_data(post_df, comment_df)
     spark.stop()
