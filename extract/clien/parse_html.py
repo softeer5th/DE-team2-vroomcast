@@ -30,23 +30,17 @@ def normalize_text(text):
     return re.sub(r'\s+', ' ', text.replace("\xa0", " ")) if text else None
 
 
-def get_post_dict(html_file, file_id, url):
+def get_post_dict(html_file: str, file_id: int, url: str) -> dict | None:
     """
-    Parses the provided HTML content to extract post details along with associated metadata
-    and comments. The function processes elements inside a predefined content view tag,
-    extracting the post's title, date of creation, article content, and interaction metrics
-    such as view count, upvotes, and comment count. It also processes and structures the
-    comments into a list of dictionaries containing individual comment data like content,
-    reply status, timestamps, and upvote counts.
+    본문 html에서 필요한 부분을 파싱한다.
 
-    :param html_file: HTML content of the post
-    :type html_file: str
-    :param file_id: Unique identifier of the file or post
-    :type file_id: int
-    :param url: URL of the post
-    :type url: str
-    :return: A dictionary containing post details and comments or None if parsing fails
-    :rtype: dict or None
+    Args:
+        html_file (str): 포스트의 html content
+        file_id (int): 포스트의 식별자
+        url (str): 포스트의 url
+
+    Returns:
+        dict: 파싱에 성공한 데이터를 리턴한다. 파싱이 실패하면 None을 리턴.
     """
     try:
         soup = BeautifulSoup(html_file, "html.parser")
