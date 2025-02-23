@@ -105,7 +105,7 @@ def get_list_of_post_url(start_datetime: datetime, end_datetime: datetime, page_
     failed_page_number = []
     for page_number in page_number_list:
         # URL 생성 및 요청
-        search_url = BASE_URL + BOARD_URL + f"&po={page_number}" if page_number != 0 else ""
+        search_url = BASE_URL + BOARD_URL + (f"&po={page_number}" if page_number != 0 else "")
         html_content = fetch_html(search_url)
         if not html_content:
             logger.error(f"failed to fetch {search_url}")
