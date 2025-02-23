@@ -71,11 +71,12 @@ if __name__ == "__main__":
         try:
             before_dynamic_post_df = spark.read.parquet(s3_before_dynamic_post)
         except AnalysisException:
+            logging.info(f"{s3_before_dynamic_post} dosen't exist. Skip this file.")
             before_dynamic_post_df = None
         try:
             after_dynamic_post_df = spark.read.parquet(s3_after_dynamic_post)
             vector_dynamic_post_df = vector_dynamic_post(before_dynamic_post_df, after_dynamic_post_df)
-            vector_dynamic_post_df.write.mode("overwrite").parquet(f"s3://{bucket}/{s3_after_dynamic_post}/vector_dynamic_post")
+            vector_dynamic_post_df.write.mode("overwrite").parquet(f"{s3_after_dynamic_post.rsplit('/', 1)[0]}/vector_dynamic_post")
         except AnalysisException:
             continue
     for s3_before_dynamic_comment, s3_after_dynamic_comment in zip(s3_before_dynamic_comments, s3_after_dynamic_comments):
@@ -83,10 +84,11 @@ if __name__ == "__main__":
         try:
             before_dynamic_comment_df = spark.read.parquet(s3_before_dynamic_comment)
         except AnalysisException:
+            logging.info(f"{s3_before_dynamic_comment} dosen't exist. Skip this file.")
             before_dynamic_comment_df = None
         try:
             after_dynamic_comment_df = spark.read.parquet(s3_after_dynamic_comment)
             vector_dynamic_comment_df = vector_dynamic_post(before_dynamic_comment_df, after_dynamic_comment_df)
-            vector_dynamic_comment_df.write.mode("overwrite").parquet(f"s3://{bucket}/{s3_after_dynamic_comment}/vector_dynamic_comment")
+            vector_dynamic_comment_df.write.mode("overwrite").parquet(f"{s3_after_dynamic_comment.rsplit('/', 1)[0]}/vector_dynamic_comment")
         except AnalysisException:
             continue
