@@ -220,11 +220,12 @@ def main_crawler(keywords: list[str], start_datetime: str, end_datetime: str, da
 
     start_datetime = datetime.strptime(start_datetime, "%Y-%m-%dT%H:%M:%S")
     end_datetime = datetime.strptime(end_datetime, "%Y-%m-%dT%H:%M:%S")
-    urls, failed_page_number = get_list_of_post_url(start_datetime, end_datetime, range(0,50))
-    logger.info(f"Found {len(urls)} URLs.")
-    logger.info(f"Try failed page URLs.")
-    retried_urls, retried_failed_page_number = get_list_of_post_url(start_datetime, end_datetime, failed_page_number)
-    urls.update(retried_urls)
+    urls, failed_page_list = get_list_of_post_url(start_datetime, end_datetime, list(range(0,50)))
+    logger.info(f"Found {len(urls)} URLs. Failed page URLs: {failed_page_list}")
+    if failed_page_list:
+        logger.info(f"Try failed page URLs.")
+        retried_urls, retried_failed_page_list = get_list_of_post_url(start_datetime, end_datetime, failed_page_list)
+        urls.update(retried_urls)
     logger.info(f"Extracted {len(urls)} URLs.")
     total, success = load_each_post_with_keyword(keywords, urls, data_for_load_s3)
     logger.info(f"Extracted {total} URLs out of {success} URLs.")
