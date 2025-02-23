@@ -58,7 +58,7 @@ def create_synchronize_task(dag, batch_json_path: str):
             raise
 
     return PythonOperator(
-        task_id="synchronize_task",
+        task_id="synchronize",
         python_callable=_synchronize_batch,
         provide_context=True,
         dag=dag,

@@ -34,7 +34,7 @@ with DAG(
     synchronize_task = create_synchronize_task(dag, "test_batch.json")
 
     def _get_prev_batch_info(**context):
-        prev_batch = pull_from_xcom("synchronize_task", "prev_batch_info", **context)
+        prev_batch = pull_from_xcom("synchronize", "prev_batch_info", **context)
         logger.info(f"Prev Batch: {prev_batch}")
         return prev_batch
 

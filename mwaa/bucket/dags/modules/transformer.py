@@ -25,8 +25,7 @@ EMR_CONFIG = {
 }
 
 
-# Jinja 템플릿을 사용한 EMR 클러스터 설정
-def get_emr_job_flow_overrides(date: str, batch: int, prev_date: str, prev_batch: int):
+def get_emr_job_flow_overrides():
     return {
         "Name": "mainTransformCluster",
         "LogUri": "{{ var.value.emr_base_log_uri }}/{{ ts_nodash }}/",
@@ -58,8 +57,7 @@ def get_emr_job_flow_overrides(date: str, batch: int, prev_date: str, prev_batch
             {
                 "Name": "kss-bootstrap",
                 "ScriptBootstrapAction": {
-                    "Path": f"s3://{S3_CONFIG_BUCKET}/"
-                    + "{{ var.value.emr_bootstrap_script_path }}"
+                    "Path": f"s3://{S3_CONFIG_BUCKET}/{{ var.value.emr_bootstrap_script_path }}"
                 },
             }
         ],
@@ -76,16 +74,15 @@ def get_emr_job_flow_overrides(date: str, batch: int, prev_date: str, prev_batch
                         "spark-submit",
                         "--deploy-mode",
                         "cluster",
-                        f"s3://{S3_CONFIG_BUCKET}/"
-                        + "{{ var.value.emr_static_script_path }}",
+                        f"s3://{S3_CONFIG_BUCKET}/{{ var.value.emr_static_script_path }}",
                         "--bucket",
                         f"{S3_BUCKET}",
                         "--input_post_paths",
-                        f"combined/*/{date}/{batch}/static/post*.parquet",
+                        "combined/*/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/static/post*.parquet",
                         "--input_comment_paths",
-                        f"combined/*/{date}/{batch}/static/comment*.parquet",
+                        "combined/*/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/static/comment*.parquet",
                         "--output_dir",
-                        f"transformed/{date}/{batch}/",
+                        "transformed/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/",
                     ],
                 },
             },
@@ -98,28 +95,27 @@ def get_emr_job_flow_overrides(date: str, batch: int, prev_date: str, prev_batch
                         "spark-submit",
                         "--deploy-mode",
                         "cluster",
-                        f"s3://{S3_CONFIG_BUCKET}/"
-                        + "{{ var.value.emr_dynamic_script_path }}",
+                        f"s3://{S3_CONFIG_BUCKET}/{{ var.value.emr_dynamic_script_path }}",
                         "--bucket",
                         f"{S3_BUCKET}",
                         "--before_dynamic_posts",
                         *[
-                            f"combined/{car_id}/{prev_date}/{prev_batch}/dynamic/post_*.parquet"
+                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['batch'] }}/dynamic/post_*.parquet"
                             for car_id in CARS
                         ],
                         "--after_dynamic_posts",
                         *[
-                            f"combined/{car_id}/{date}/{batch}/dynamic/post_*.parquet"
+                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/dynamic/post_*.parquet"
                             for car_id in CARS
                         ],
                         "--before_dynamic_comments",
                         *[
-                            f"combined/{car_id}/{prev_date}/{prev_batch}/dynamic/comment_*.parquet"
+                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['batch'] }}/dynamic/comment_*.parquet"
                             for car_id in CARS
                         ],
                         "--after_dynamic_comments",
                         *[
-                            f"combined/{car_id}/{date}/{batch}/dynamic/comment_*.parquet"
+                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/dynamic/comment_*.parquet"
                             for car_id in CARS
                         ],
                     ],
@@ -129,27 +125,28 @@ def get_emr_job_flow_overrides(date: str, batch: int, prev_date: str, prev_batch
     }
 
 
-class CustomEmrCreateJobFlowOperator(EmrCreateJobFlowOperator):
-    def execute(self, context: Context) -> str:
-        prev_batch_info = pull_from_xcom("synchronize_task", "prev_batch_info", **context)
-        current_batch_info = pull_time_info(**context)
+# class CustomEmrCreateJobFlowOperator(EmrCreateJobFlowOperator):
+#     def execute(self, context: Context) -> str:
+#         prev_batch_info = pull_from_xcom("synchronize_task", "prev_batch_info", **context)
+#         current_batch_info = pull_time_info(**context)
 
-        date = current_batch_info["date"]
-        batch = current_batch_info["batch"]
+#         date = current_batch_info["date"]
+#         batch = current_batch_info["batch"]
 
-        prev_date = prev_batch_info["date"]
-        prev_batch = prev_batch_info["batch"]
+#         prev_date = prev_batch_info["date"]
+#         prev_batch = prev_batch_info["batch"]
 
-        self.job_flow_overrides = get_emr_job_flow_overrides(
-            date, batch, prev_date, prev_batch
-        )
+#         self.job_flow_overrides = get_emr_job_flow_overrides(
+#             date, batch, prev_date, prev_batch
+#         )
 
-        return super().execute(context)
+#         return super().execute(context)
 
 
 def create_execute_emr_task(dag):
-    return CustomEmrCreateJobFlowOperator(
+    return EmrCreateJobFlowOperator(
         task_id="create_emr_cluster",
+        job_flow_overrides=get_emr_job_flow_overrides(),
         dag=dag,
     )
 
