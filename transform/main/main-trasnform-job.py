@@ -1,15 +1,12 @@
-import random
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
-from openai import OpenAI
-import kss
+from pyspark.sql.utils import AnalysisException
+from kiwipiepy import Kiwi
 import pandas as pd
 import os
 import argparse
 import logging
-import openai
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -67,113 +64,32 @@ keyword_dict = {
   ]
 }
 
-from pydantic import BaseModel, Field
-
-# Pydantic을 활용한 감성 분석 결과 모델 정의
-class SentimentAnalysis(BaseModel):
-    sentiments: list[int] = Field(
-        ..., description="각 문장의 감성 점수 배열 (1: 긍정, 0: 중립, -1: 부정)"
-    )
-
-def analyze_sentiments(sentences):
-    # return [ random.randint(-1,1) for _ in range(len(sentences))]
-    """OpenAI API를 Batch로 호출하여 감성 분석 후 숫자 배열로 반환"""
-    if sentences is None or len(sentences) == 0:
-        return []
-
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    # Batch 요청을 위한 프롬프트 생성
-    prompt = "\n".join([f'{idx + 1}번째 문장 >> "{sent}"' for idx, sent in enumerate(sentences)])
-
-    full_prompt = f"""
-    다음은 한국어 문장 목록입니다. 각 문장의 감성을 긍정(1), 부정(-1), 중립(0) 중 하나로 분류하세요.
-    응답은 배열 형식으로 숫자 값만 반환합니다. 
-    !!! 응답의 형식은 반드시 입력된 문장의 개수({len(sentences)})와 동일한 길이의 배열이어야 합니다. !!!
-    각 번호에 해당하는 감정은 다음과 같은 양식으로만 작성해야 합니다:
-    [1, -1, 0, …]
-
-    문장 개수: {len(sentences)}
-    다음은 문장 목록입니다:
-    {prompt}
-    """
-    max_retries = 10
-    for attempt in range(max_retries):
-        try:
-            response = client.beta.chat.completions.parse(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system",
-                     "content": "당신의 작업은 주어진 한국어 문장의 감성을 긍정(1), 부정(-1), 중립(0)으로 분류하고 배열 형식으로 숫자 값만 반환하는 것입니다."},
-                    {"role": "user", "content": full_prompt},
-                ],
-                response_format=SentimentAnalysis,
-            )
-            sentiments = response.choices[0].message.parsed.sentiments
-            print(sentiments)
-            # 응답 개수가 입력 개수와 다를 경우 기본값 반환
-            if len(sentiments) != len(sentences):
-                logger.warning(f"[Error Open AI] 응답 개수 불일치: 입력({len(sentences)}) vs 응답({len(sentiments)})")
-                return [0] * len(sentences)
-
-            logger.info(f"[Rated] Sentiments: {sentiments}, attempt: {attempt+1}/{max_retries}")
-            return sentiments
-
-        except openai.RateLimitError as e:
-            wait_time = 1.5 ** attempt
-            logger.warning(f"[Rate Limit 초과] {e}. {wait_time}초 후 재시도... ({attempt+1}/{max_retries})")
-            time.sleep(wait_time)
-
-        except Exception as e:
-            logger.error(f"[Error Open AI] {e}")
-            return [0] * len(sentences)
-
-    logger.error("[Error Open AI] 최대 재시도 횟수를 초과했습니다.")
-    return [0] * len(sentences)
-
-
 @pandas_udf(ArrayType(
     StructType([
         StructField("id", StringType(), False),
         StructField("sentence", StringType(), True),
-        StructField("from_post", BooleanType(), True)
+        StructField("from_post", BooleanType(), True),
+        StructField("categories_keywords", ArrayType(  # 카테고리 키워드 리스트
+            StructType([
+                StructField("category", StringType(), True),
+                StructField("keyword", StringType(), True)
+            ])
+        ), True)
     ])
 ))
-def get_sentences(source_id: pd.Series, title: pd.Series, content: pd.Series) -> pd.Series:
+def get_sentences(source_ids: pd.Series, titles: pd.Series, contents: pd.Series) -> pd.Series:
+    kiwi = Kiwi()
     results = []
-    for source_id, title, content in zip(source_id, title, content):
+    for source_id, title, content in zip(source_ids, titles, contents):
         result_per_content = []
-        sentences = kss.split_sentences(title) if title else []
-        content_sentences = kss.split_sentences(content) if content else []
-        sentences.extend(content_sentences)
+        sentences = []
+        if title:
+            for kiwi_sent in kiwi.split_into_sents(title):
+                sentences.append(kiwi_sent.text)
+        if content:
+            for kiwi_sent in kiwi.split_into_sents(content):
+                sentences.append(kiwi_sent.text)
         for idx, sentence in enumerate(sentences):
-            result_per_content.append((f"{source_id}_{idx}", sentence, True if title else False))
-        results.append(result_per_content)
-    return pd.Series(results)
-
-@pandas_udf(StructType([
-    StructField("sentiment", IntegerType(), True),  # 감성 분석 점수
-    StructField("categories_keywords", ArrayType(  # 카테고리 키워드 리스트
-        StructType([
-            StructField("category", StringType(), True),
-            StructField("keyword", StringType(), True)
-        ])
-    ), True)
-]))
-def extract_sentiment_category_keyword(sentences: pd.Series) -> pd.Series:
-    """KSS로 문장을 분리하고, 키워드를 찾은 후 튜플을 반환"""
-    results = []  # 최종 반환 값 저장
-    BATCH_SIZE = 20  # Batch 크기 설정
-
-    for batch_idx in range(0, len(sentences), BATCH_SIZE):
-        # 입력 문장을 배치 단위로 분할
-        batch_sentences = sentences[batch_idx:batch_idx + BATCH_SIZE]
-
-        # 배치 내 모든 문장에 대해 감정 분석 실행
-        sentiments = analyze_sentiments(batch_sentences)
-
-        # 각 문장마다 처리
-        for sentence, sentiment in zip(batch_sentences, sentiments):
             upper_sentence = sentence.upper()  # 대문자로 변환하여 키워드 검색
             categories_keywords = []  # 각 문장의 키워드 결과 저장
 
@@ -183,62 +99,72 @@ def extract_sentiment_category_keyword(sentences: pd.Series) -> pd.Series:
                     if keyword in upper_sentence:
                         # 키워드 탐지 시 카테고리와 키워드를 구조체로 추가
                         categories_keywords.append({"category": category, "keyword":keyword})
-            # 최종적으로 문장의 sentiment와 categories_keywords를 저장
-            results.append((sentiment, categories_keywords))
-
-    return pd.DataFrame(results, columns=["sentiment", "categories_keywords"])
+            result_per_content.append((f"{source_id}_{idx}", sentence, True if title else False, categories_keywords))
+        results.append(result_per_content)
+    return pd.Series(results)
 
 # 링크 필터링, 유저 필터링
 def regex_replace_privacy(df):
-    df = df.withColumn("content", regexp_replace(col("content"), r'https?://\S+', ''))
-    df = df.withColumn("content", regexp_replace(col("content"), r'@[\w\uac00-\ud7af]+', ''))
+    df = df.withColumn("content", regexp_replace(col("content"), r'https?://\S+', '<URL>'))
+    df = df.withColumn("content",
+                   regexp_replace(col("content"), r'(?<=\s|^)@[A-Za-z0-9_가-힣\-]+', '<USER>'))
+    df = df.withColumn("content",
+                       regexp_replace(col("content"), r'&nbsp;|\xa0', '')) # nbsp에 대한 처리
+    df = df.withColumn("content", regexp_replace(col("content"), r'\s+', ' ')) # 연속되는 공백을 스페이스로 처리.
+    df = df.withColumn("content", regexp_replace(col("content"), r"([가-힣]+[.?!])(?=[가-힣0-9a-zA-Z])", r"$1 ")) # 문장이 분리되지 않는 경우를 대비한 스페이스바 추가
     return df
 
 def transform_static_data(post_df, comment_df):
-    post_df = regex_replace_privacy(post_df)
-    comment_df = regex_replace_privacy(comment_df)
-    post_pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")
-    comment_pre_sentence_df = comment_df.selectExpr("id AS source_id", "CAST(NULL AS STRING) AS title", "content", "created_at")
-
-    post_sentence_df = post_pre_sentence_df.withColumn(
-        "sentences",
-        explode(
-            get_sentences(
-                col("source_id"), col("title"), col("content")
+    post_sentence_df = None
+    comment_sentence_df = None
+    if post_df is not None:
+        post_df = regex_replace_privacy(post_df)
+        post_pre_sentence_df = post_df.selectExpr("id AS source_id", "title", "content", "created_at")
+        post_sentence_df = post_pre_sentence_df.withColumn(
+            "sentences",
+            explode(
+                get_sentences(
+                    col("source_id"), col("title"), col("content")
+                )
             )
-        )
-    ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
-                 "sentences.sentence AS sentence", "created_at")
-    comment_sentence_df = comment_pre_sentence_df.withColumn(
-        "sentences",
-        explode(
-            get_sentences(
-                col("source_id"), col("title"), col("content")
+        ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
+                     "sentences.sentence AS sentence", "created_at",
+                     "sentences.categories_keywords AS categories_keywords")
+    if comment_df is not None:
+        comment_df = regex_replace_privacy(comment_df)
+        comment_pre_sentence_df = comment_df.selectExpr("id AS source_id", "CAST(NULL AS STRING) AS title", "content", "created_at")
+        comment_sentence_df = comment_pre_sentence_df.withColumn(
+            "sentences",
+            explode(
+                get_sentences(
+                    col("source_id"), col("title"), col("content")
+                )
             )
-        )
-    ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
-                 "sentences.sentence AS sentence", "created_at")
-    sentence_df = post_sentence_df.union(comment_sentence_df)
-    sentence_df_with_keywords = sentence_df.withColumn(
-        "sentiment_category_keyword",
-        extract_sentiment_category_keyword(col("sentence"))
+        ).selectExpr("sentences.id AS id", "source_id", "sentences.from_post AS from_post",
+                     "sentences.sentence AS sentence", "created_at", "sentences.categories_keywords AS categories_keywords")
+    if post_sentence_df is not None and comment_sentence_df is not None:
+        total_sentence_df = post_sentence_df.union(comment_sentence_df)
+    elif post_sentence_df is not None:
+        total_sentence_df = post_sentence_df
+    elif comment_sentence_df is not None:
+        total_sentence_df = comment_sentence_df
+    else:
+        total_sentence_df = None
+        return
+    total_sentence_df = total_sentence_df.cache()
+    sentence_df = total_sentence_df.selectExpr("id", "source_id", "from_post", "sentence", "created_at")
+    keyword_category = total_sentence_df.withColumn(
+        "categories_keywords", explode(col("categories_keywords"))
+    ).selectExpr(
+        "id as sentence_id", "categories_keywords.category AS category", "categories_keywords.keyword AS keyword"
     )
-    sentence_df_with_keywords.cache()
-    sentence_df = sentence_df_with_keywords.selectExpr("id", "source_id", "from_post", "sentence",
-                                                       "sentiment_category_keyword.sentiment AS sentiment",
-                                                       "created_at")
-    keyword_category = sentence_df_with_keywords.selectExpr("id as sentence_id",
-                                                            "sentiment_category_keyword.categories_keywords AS categories_keywords")
-    keyword_category = keyword_category.withColumn("categories_keywords",
-                                                   explode(col("categories_keywords"))).selectExpr("sentence_id",
-                                                                                                   "categories_keywords.category AS category",
-                                                                                                   "categories_keywords.keyword AS keyword")
     logger.info(
         f"Write post static and comment static to {mode}{bucket}/{output_dir}/post_static and {mode}{bucket}/{output_dir}/comment_static")
     post_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/post_static")
     comment_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/comment_static")
     logger.info(
-        f"Post and Comment Static Write Complete. {mode}{bucket}/{output_dir}/post_static, {mode}{bucket}/{output_dir}/comment_static")
+        f"Post and Comment Static Write Complete. {mode}{bucket}/{output_dir}/post_static, {mode}{bucket}/{output_dir}/comment_static"
+    )
     sentence_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/sentence")
     logger.info(f"Sentence Table Write Complete. {mode}{bucket}/{output_dir}/sentence")
     keyword_category.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/keyword_category")
@@ -268,10 +194,20 @@ if __name__ == "__main__":
     #     .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
     #     .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
     #     .getOrCreate()
-    print(spark.sparkContext.uiWebUrl)
-    post_df = spark.read.parquet(*s3_input_post_paths)
-    comment_df = spark.read.parquet(*s3_input_comment_paths)
+    # print(spark.sparkContext.uiWebUrl)
+    try:
+        post_df = spark.read.parquet(*s3_input_post_paths)
+    except AnalysisException as e:
+        logger.warning(f"Post Read Error: {e}")
+        post_df = None
+    try:
+        comment_df = spark.read.parquet(*s3_input_comment_paths)
+    except AnalysisException as e:
+        logger.warning(f"Comment Read Error: {e}")
+        comment_df = None
     logger.info(f"Post and Comment Read Complete.")
+    if post_df is None and comment_df is None:
+        logger.error("There are not valid post and comment data.")
+        exit(0)
     transform_static_data(post_df, comment_df)
     spark.stop()
-
