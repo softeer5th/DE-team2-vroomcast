@@ -20,6 +20,9 @@ def create_synchronize_task(dag, batch_json_path: str):
 
         # 현재 배치 정보
         current_batch_info = pull_time_info(**context)
+        context["task_instance"].xcom_push(
+            key="current_batch_info", value=current_batch_info
+        )
 
         # 현재 배치 정보를 출력
         logger.info(f"Current batch: {current_batch_info}")

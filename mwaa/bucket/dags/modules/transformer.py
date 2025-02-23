@@ -57,7 +57,7 @@ def get_emr_job_flow_overrides():
             {
                 "Name": "kss-bootstrap",
                 "ScriptBootstrapAction": {
-                    "Path": f"s3://{S3_CONFIG_BUCKET}/{{ var.value.emr_bootstrap_script_path }}"
+                    "Path": f"s3://{S3_CONFIG_BUCKET}/" + "{{ var.value.emr_bootstrap_script_path }}"
                 },
             }
         ],
@@ -74,7 +74,7 @@ def get_emr_job_flow_overrides():
                         "spark-submit",
                         "--deploy-mode",
                         "cluster",
-                        f"s3://{S3_CONFIG_BUCKET}/{{ var.value.emr_static_script_path }}",
+                        f"s3://{S3_CONFIG_BUCKET}/" + "{{ var.value.emr_static_script_path }}",
                         "--bucket",
                         f"{S3_BUCKET}",
                         "--input_post_paths",
@@ -95,27 +95,27 @@ def get_emr_job_flow_overrides():
                         "spark-submit",
                         "--deploy-mode",
                         "cluster",
-                        f"s3://{S3_CONFIG_BUCKET}/{{ var.value.emr_dynamic_script_path }}",
+                        f"s3://{S3_CONFIG_BUCKET}/" + "{{ var.value.emr_dynamic_script_path }}",
                         "--bucket",
                         f"{S3_BUCKET}",
                         "--before_dynamic_posts",
                         *[
-                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['batch'] }}/dynamic/post_*.parquet"
+                            f"combined/{car_id}/" + "{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['batch'] }}/dynamic/post_*.parquet"
                             for car_id in CARS
                         ],
                         "--after_dynamic_posts",
                         *[
-                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/dynamic/post_*.parquet"
+                            f"combined/{car_id}/" + "{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/dynamic/post_*.parquet"
                             for car_id in CARS
                         ],
                         "--before_dynamic_comments",
                         *[
-                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['batch'] }}/dynamic/comment_*.parquet"
+                            f"combined/{car_id}/" + "{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='prev_batch_info')['batch'] }}/dynamic/comment_*.parquet"
                             for car_id in CARS
                         ],
                         "--after_dynamic_comments",
                         *[
-                            f"combined/{car_id}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/dynamic/comment_*.parquet"
+                            f"combined/{car_id}/" + "{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['date'] }}/{{ task_instance.xcom_pull(task_ids='synchronize', key='current_batch_info')['batch'] }}/dynamic/comment_*.parquet"
                             for car_id in CARS
                         ],
                     ],
