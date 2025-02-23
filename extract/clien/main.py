@@ -11,33 +11,37 @@ from parse_html import get_post_dict
 
 # 상수 정의
 BASE_URL = "https://www.clien.net"
+BOARD_URL = "/service/board/cm_car?&od=T31&category=0"
 SEARCH_URL = "/service/search?q={}&sort=recency&{}boardCd=cm_car&isBoard=true"
 BOARD_FILTER = "cm_car"
 SLEEP_SECONDS = (1, 3)
 TRIAL_LIMIT = 10
 
+s3 = boto3.resource("s3")
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-user_agent_list = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
-    "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.64 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.111 Safari/537.36",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:15.0) Gecko/20100101 Firefox/15.0.1",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.75 Safari/537.36 Edg/99.0.1150.36",
-    "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko",
-    "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.75 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0",
-]
 
 def fetch_html(url: str) -> str:
-    """URL로부터 HTML 콘텐츠를 가져옵니다."""
+    """
+    HTML content를 fetch한다. 만약에 TRIAL_LIMIT 만큼 시도해도 성공하지 못한 경우에는 빈 문자열을 반환한다.
+
+    Parameters:
+        url: str
+            HTML을 얻기 위한 URL
+
+    Returns:
+        str
+            HTML content를 문자열로 반환.
+            만약에 실패한 경우에는 빈 문자열을 반환.
+    """
     i = 0
     while i < TRIAL_LIMIT:
         try:
-            response = requests.get(url, headers={"User-Agent": user_agent_list[i]})
+            response = requests.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+            }, allow_redirects=True)
             logger.info(f"{response.status_code} from {url}")
             if response.status_code != 200:
                 i += 1
@@ -52,12 +56,24 @@ def fetch_html(url: str) -> str:
     return ""
 
 
-def parse_rows(rows, start_datetime, end_datetime) -> dict:
-    """HTML row 데이터를 파싱하고 필터링하여 URL 딕셔너리를 반환합니다."""
+def parse_rows(rows: list, start_datetime: datetime.datetime, end_datetime: datetime.datetime) -> dict[
+    str, tuple[str, str]]:
+    """
+    포스트 목록 html list를 받아서, 개별 url, title, 작성시간을 수집한다.
+
+    Arguments:
+        rows (list): 파싱이 필요한 html row list.
+        start_datetime (datetime.datetime): 해당 시간보다 크거나 같은 시간의 포스트 정보만 추출한다.
+        end_datetime (datetime.datetime): 해당 시간보다 작거나 같은 시간의 포스트 정보만 추출한다.
+
+    Returns:
+        dict: content_id를 key로 하고 value에 full_url과 content_title이 존재.
+    """
     urls = {}
     for row in rows:
         content_time = row.select_one('span.timestamp')
-        content_url = row.select_one('a.subject_fixed')
+        content_url = row.select_one('a.list_subject')
+        content_title = row.select_one('span.subject_fixed')['title']
         content_url_postfix = content_url['href'].split('?')[0]
         content_id = content_url_postfix.split('/')[-1]
         content_datetime = datetime.strptime(content_time.text, "%Y-%m-%d %H:%M:%S")
@@ -66,34 +82,38 @@ def parse_rows(rows, start_datetime, end_datetime) -> dict:
         if start_datetime > content_datetime or end_datetime < content_datetime:
             continue
         full_url = BASE_URL + content_url_postfix
-        urls[content_id] = full_url
+        urls[content_id] = (full_url, content_title)
     return urls
 
 
-def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
+def get_list_of_post_url(start_datetime: datetime, end_datetime: datetime, page_number_list: list[int]) -> tuple[
+    dict, list[int]]:
     """
-    지정된 키워드와 날짜 기준으로 게시글 URL을 크롤링합니다.
-    :param keyword: 검색 키워드
-    :param date: 검색 대상 날짜 (형식: "%Y-%m-%d")
-    :return: 게시글 URL 딕셔너리
+    주어진 페이지 넘버 리스트를 통해서, 시작시간과 종료시간 사이의 포스트 url들을 추출한다.
+
+    Parameters:
+        start_datetime (datetime): 포스트 작성시간을 필터링할 시작시간
+        end_datetime (datetime): 포스트 작성시간을 필터링할 종료시간
+        page_number_list (list[int]): 확인할 페이지 넘버 리스트.
+
+    Returns:
+        tuple[dict, list[int]]
+            튜플의 첫번째 원소로 url 목록을 가진 dict(key는 content_id, value는 full_url과 content_title의 튜플)를 반환하고,
+            목록 불러오기에 실패한 페이지 리스트를 두번째 원소로 넣어준다.
     """
-    encoded_keyword = urllib.parse.quote(keyword)
-    start_datetime = datetime.strptime(start_datetime, "%Y-%m-%dT%H:%M:%S")
-    end_datetime = datetime.strptime(end_datetime, "%Y-%m-%dT%H:%M:%S")
-    page_number = 0
     urls = {}
     failed_page_number = []
-    while page_number < 50:
+    for page_number in page_number_list:
         # URL 생성 및 요청
-        search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
+        search_url = BASE_URL + BOARD_URL + f"&po={page_number}" if page_number != 0 else ""
         html_content = fetch_html(search_url)
         if not html_content:
             logger.error(f"failed to fetch {search_url}")
-            page_number += 1
+            failed_page_number.append(page_number)
             continue
         # 응답 파싱 및 필터링
         soup = BeautifulSoup(html_content, "html.parser")
-        rows = soup.select("div.list_item.symph_row.jirum")
+        rows = soup.select("div.list_item.symph_row")
         logger.info(f"Parsing {len(rows)} rows.")
         urls.update(parse_rows(rows, start_datetime, end_datetime))
 
@@ -103,32 +123,113 @@ def main_crawler(keyword:str, start_datetime:str, end_datetime:str) -> dict:
                 "%Y-%m-%d %H:%M:%S"
         ) < start_datetime:
             break
-
-        page_number += 1
         time.sleep(random.randint(*SLEEP_SECONDS))  # 요청 간 대기 시간
+    return urls, failed_page_number
+
+
+def load_each_post_with_keyword(keywords: list[str], urls: dict[int, tuple[str, str]], data_for_load_s3: dict) -> tuple[
+    int, int]:
+    """
+    주어진 url들을 돌면서, 제목에 키워드 중 하나가 있는지 확인하고, 키워드 중 하나가 있게 되면, save_post_to_s3()를 불러온다.
+
+    Parameters:
+	    keywords (list[str]): 게시물 제목 내에서 검색할 키워드 목록.
+	    urls (dict[int, tuple[str, str]]): 키가 식별자(int)이며, 값은 URL (str)과 게시물 제목 (str)을 포함한 튜플인 딕셔너리.
+	    data_for_load_s3 (dict): 게시물을 S3 저장 서비스에 저장하는 데 필요한 데이터를 포함하는 딕셔너리.
+
+    Returns:
+        tuple[int, int]: 키워드와 일치하는 제목을 가진 포스트의 개수, S3에 성공적으로 저장된 포스트의 개수
+    """
+    total = 0
+    success = 0
+    for id, url_title in urls.items():
+        url, title = url_title
+        has_keyword = False
+        for keyword in keywords:
+            lower_keyword = keyword.lower()
+            lower_title = title.lower()
+            if lower_keyword in lower_title:
+                has_keyword = True
+                break
+        if not has_keyword:
+            continue
+        else:
+            total += 1
+            if save_post_to_s3(id, url, data_for_load_s3):
+                success += 1
+                time.sleep(random.randint(*SLEEP_SECONDS))
+    return total, success
+
+
+def save_post_to_s3(id: int, url: str, data_for_load_s3: dict) -> bool:
+    """
+    게시물의 데이터를 S3 버킷에 저장한다.
+    주어진 URL에서 HTML 콘텐츠를 가져와 구조화된 딕셔너리로 처리하고,
+    데이터를 JSON 형식으로 직렬화한 후,
+    제공된 메타데이터를 기반으로 특정 경로에 S3 버킷에 업로드한다.
+
+    Args:
+        id (int): 게시물의 고유 식별자.
+        url (str): 게시물의 HTML 콘텐츠를 가져올 URL.
+        data_for_load_s3 (dict): S3 업로드를 위한 메타데이터를 포함하는 딕셔너리:
+            - 'car_id' (str): 진행 중인 작업에서 차량 식별자.
+            - 'date' (str): 작업 날짜, S3 경로에 포함.
+            - 'batch_num' (str): 작업의 배치 번호, S3 경로에 포함.
+            - 'bucket' (str): 데이터가 업로드될 S3 버킷의 이름.
+
+
+    Returns:
+       bool: 데이터가 S3에 성공적으로 업로드되면 True, 그렇지 않으면 False.
+    """
+    html_content = fetch_html(url)
+    if not html_content:
+        logger.error(f"failed to fetch {url}")
+        return False
+    dump_data = get_post_dict(html_content, id, url)
+    json_body = json.dumps(
+        dump_data,
+        ensure_ascii=False,
+        indent=4
+    )
+    load_path = f"extracted/{data_for_load_s3['car_id']}/{data_for_load_s3['date']}/{data_for_load_s3['batch_num']}/raw/clien/{id}.json"
+    try:
+        s3.Object(data_for_load_s3['bucket'], load_path).put(Body=json_body)
+        logger.info(f"put extracted s3://{load_path} to s3")
+    except Exception as e:
+        logger.error(f"failed to put extracted s3://{load_path} to s3")
+        logger.error(e)
+        return False
+    return True
+
+
+def main_crawler(keywords: list[str], start_datetime: str, end_datetime: str, data_for_load_s3: dict) -> tuple[
+    int, int]:
+
+    """
+    게시물 URL을 키워드 및 지정된 시간 범위에 따라 추출하는 메인 크롤링 프로세스를 실행하며, 관련 데이터를 지정된 저장소에 로드한다.
+
+    Args:
+        keywords (list[str]): 게시물을 필터링할 키워드 목록.
+        start_datetime (str): ISO 8601 형식("YYYY-MM-DDTHH:MM:SS")의 시작 날짜 및 시간.
+        end_datetime (str): ISO 8601 형식("YYYY-MM-DDTHH:MM:SS")의 종료 날짜 및 시간.
+        data_for_load_s3 (dict): 결과를 S3 버킷에 로드하는 데 필요한 구성 또는 데이터.
+
+    Returns:
+        tuple[int, int]: 처리된 총 URL 수와 성공적으로 추출된 URL 수를 포함하는 튜플.
+    """
+
+    start_datetime = datetime.strptime(start_datetime, "%Y-%m-%dT%H:%M:%S")
+    end_datetime = datetime.strptime(end_datetime, "%Y-%m-%dT%H:%M:%S")
+    urls, failed_page_number = get_list_of_post_url(start_datetime, end_datetime, range(0,50))
     logger.info(f"Found {len(urls)} URLs.")
     logger.info(f"Try failed page URLs.")
-    for page_number in failed_page_number:
-        search_url = BASE_URL + SEARCH_URL.format(encoded_keyword, f"p={page_number}&"if page_number else "")
-        html_content = fetch_html(search_url)
-        if not html_content:
-            logger.error(f"failed to fetch {search_url}")
-            continue
-        soup = BeautifulSoup(html_content, "html.parser")
-        rows = soup.select("div.list_item.symph_row.jirum")
-        urls.update(parse_rows(rows, start_datetime, end_datetime))
-
+    retried_urls, retried_failed_page_number = get_list_of_post_url(start_datetime, end_datetime, failed_page_number)
+    urls.update(retried_urls)
     logger.info(f"Extracted {len(urls)} URLs.")
-    return urls
+    total, success = load_each_post_with_keyword(keywords, urls, data_for_load_s3)
+    logger.info(f"Extracted {total} URLs out of {success} URLs.")
+    return total, success
 
-def save_to_s3(s3, bucket, object_key, data):
-    """Save a JSON object to S3."""
-    s3.put_object(
-        Bucket=bucket,
-        Key=object_key,
-        Body=json.dumps(data, indent=4, ensure_ascii=False),
-        ContentType='application/json'
-    )
 
 def lambda_handler(event, context):
     """
@@ -150,26 +251,17 @@ def lambda_handler(event, context):
     total_count = 0
     success_count = 0
     try:
-        s3 = boto3.resource("s3")
-        for keyword in keywords:
-            logger.info(f"Search started keywords: {keyword} date: {date} car_id: {car_id}")
-            urls = main_crawler(keyword, start_datetime, end_datetime)
-            for id, url in urls.items():
-                total_count += 1
-                html_content = fetch_html(url)
-                if not html_content:
-                    logger.error(f"failed to fetch {url}")
-                    continue
-                success_count += 1
-                dump_data = get_post_dict(html_content, id, url)
-                json_body = json.dumps(
-                    dump_data,
-                    ensure_ascii=False,
-                    indent=4
-                )
-                s3.Object(bucket, f"extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json").put(Body=json_body)
-                logger.info(f"put extracted s3://{bucket}/extracted/{car_id}/{date}/{batch_num}/raw/clien/{id}.json to s3")
-                time.sleep(random.randint(1, 3))
+        total_count, success_count = main_crawler(
+            keywords=keywords,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            data_for_load_s3 = {
+                "bucket":bucket,
+                "car_id":car_id,
+                "date":date,
+                "batch_num":batch_num,
+            }
+        )
     except Exception as e:
         logger.error(e)
         return {
