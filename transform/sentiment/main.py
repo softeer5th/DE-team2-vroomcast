@@ -21,7 +21,7 @@ SCHEMA = pa.schema([
     ('source_id', pa.string()),       # VARCHAR(255)
     ('from_post', pa.bool_()),        # BOOLEAN
     ('sentence', pa.string()),        # VARCHAR(2048)
-    ('created_at', pa.timestamp('ns')),  # TIMESTAMP
+    ('created_at', pa.timestamp('ms')),  # TIMESTAMP
     ('sentiment', pa.int32())         # INT
 ])
 
