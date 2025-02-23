@@ -56,15 +56,15 @@ def fetch_html(url: str) -> str:
     return ""
 
 
-def parse_rows(rows: list, start_datetime: datetime.datetime, end_datetime: datetime.datetime) -> dict[
+def parse_rows(rows: list, start_datetime: datetime, end_datetime: datetime) -> dict[
     str, tuple[str, str]]:
     """
     포스트 목록 html list를 받아서, 개별 url, title, 작성시간을 수집한다.
 
     Arguments:
         rows (list): 파싱이 필요한 html row list.
-        start_datetime (datetime.datetime): 해당 시간보다 크거나 같은 시간의 포스트 정보만 추출한다.
-        end_datetime (datetime.datetime): 해당 시간보다 작거나 같은 시간의 포스트 정보만 추출한다.
+        start_datetime (datetime): 해당 시간보다 크거나 같은 시간의 포스트 정보만 추출한다.
+        end_datetime (datetime): 해당 시간보다 작거나 같은 시간의 포스트 정보만 추출한다.
 
     Returns:
         dict: content_id를 key로 하고 value에 full_url과 content_title이 존재.
