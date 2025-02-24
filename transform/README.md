@@ -1,12 +1,12 @@
-# AWS Lambda 기반 데이터 변환 및 감성 분석 프로젝트
+# AWS Lambda 기반 데이터 변환 및 감성 분석 디렉토리
 
-이 프로젝트는 AWS Lambda에서 실행되는 **데이터 변환 파이프라인**을 구현합니다.  
+이 디렉토리는 AWS Lambda에서 실행되는 **데이터 변환 파이프라인**을 구현합니다.  
 S3에 저장된 **Parquet 파일**을 불러와 **데이터 변환 작업을 수행**하고,  
 필요에 따라 감성 분석을 수행한 후 결과를 다시 **S3에 저장**하는 방식으로 동작합니다.
 
 ---
 
-## 📌 프로젝트 개요
+## 📌 디렉토리 개요
 
 1. **S3에서 Parquet 데이터 로드**  
 2. **데이터 변환 수행 (Main Transform, Dynamic Transform)**  
@@ -74,23 +74,6 @@ AWS Lambda 실행 시 자동으로 호출되는 **엔트리포인트** 함수입
 ### 4️⃣ S3에 변환 및 분석 결과 저장
 - **PyArrow를 이용해 DataFrame을 Parquet 포맷으로 변환합니다.**
 - **S3에 새로운 Parquet 파일을 업로드하여 저장합니다.**
-
----
-
-## 🚀 실행 방법
-
-### 1️⃣ Docker 이미지 빌드
-```bash
-docker build -t lambda-data-transform .
-```
-- AWS Lambda에 배포할 컨테이너 이미지를 생성합니다.
-
-### 2️⃣ Lambda 배포
-1. 빌드된 이미지를 AWS ECR(Elastic Container Registry)에 푸시  
-2. 해당 이미지를 Lambda 함수에 연결하여 실행  
-
-### 3️⃣ Lambda 트리거 설정
-- **S3 이벤트 트리거**를 설정하여 특정 폴더에 Parquet 파일이 업로드되면 자동 실행되도록 구성할 수 있습니다.
 
 ---
 
