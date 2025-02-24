@@ -48,4 +48,5 @@
     - chrome, chrome-driver의 최신 stable version을 다운로드
 
 ## Notes
-검색 시작, 끝 시간의 Datetime의 형식은 `YYYY-mm-DDTHH:MM:SS`입니다.
+- 검색 시작, 끝 시간의 Datetime의 형식은 `YYYY-mm-DDTHH:MM:SS`입니다.
+- Lambda에서 구동 시 2048MB 이상의 메모리를 필요로 합니다.
