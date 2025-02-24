@@ -2,7 +2,7 @@ import awswrangler as wr
 import json
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Redshift 연결
 conn = wr.redshift.connect(secret_id=os.getenv("SECRET_ID"))
@@ -37,7 +37,7 @@ def get_recent_half_day_trend():
     WITH RECURSIVE TimeBuckets(bucket_end, window_start) AS (
         SELECT
             MAX(extracted_at) AS bucket_end,
-            MAX(extracted_at) - INTERVAL '12 hours' AS window_start
+            MAX(extracted_at) - INTERVAL '6 hours' AS window_start
         FROM v_post_dynamic
         UNION ALL
         SELECT
@@ -107,78 +107,72 @@ def get_recent_half_day_trend():
     )
     return df
 
-
-def format_slack_message(alerts_df):
+def format_slack_messages(alerts_df):
     """Slack 메시지를 경고 내역에 맞게 포맷팅"""
-    if not alerts_df.empty:
-        alert_text_lines = [
-            f"Car: {row['car_id']}, Category: {row['category']}, Change: {row['view_change']:.2f}, Total: {row['total_view']}"
-            for _, row in alerts_df.iterrows()
-        ]
-        alerts_text = "\n".join(alert_text_lines)
-    else:
-        alerts_text = "특별한 이상 변화가 없습니다."
-
-    header_text = ":rotating_light: :bar_chart: *조회 집계 경고* :bar_chart: :rotating_light:"
-    current_time = datetime.now()
-    body_text = (
-        f"*기준 시간:* {current_time:%Y-%m-%d %H:%M:%S}\n\n"
-        f"{alerts_text}\n\n"
-        f":warning: *이상 징후 감지!*"
-    )
-
-    slack_message = {
-        "text": ":eyes: 소셜 트랜드 이상징후 발견",
-        "attachments": [
-            {
-                "color": "#ff0000",
-                "blocks": [
-                    {
-                        "type": "header",
-                        "text": {
-                            "type": "plain_text",
-                            "text": header_text,
-                            "emoji": True
-                        }
-                    },
-                    {"type": "divider"},
-                    {
-                        "type": "section",
-                        "fields": [
-                            {
-                                "type": "mrkdwn",
-                                "text": body_text
-                            }
-                        ]
-                    },
-                    {
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": f":information_source: 이 메시지는 자동 알림 시스템에 의해 전송되었습니다.\n추가 정보는 {os.getenv('SUPERSET_URL')} 에서 확인하세요"
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
-    }
-    return slack_message
-
-
-def send_slack_notification(slack_message, webhook_url: str):
-    """Slack 웹훅 URL로 알림 전송"""
-    response = requests.post(
-        webhook_url, data=json.dumps(slack_message),
-        headers={'Content-Type': 'application/json'}
-    )
-    if response.status_code != 200:
-        raise ValueError(
-            f"Slack 요청 실패: {response.status_code}, 응답:\n{response.text}"
+    now_utc = datetime.now(timezone.utc)  # UTC 현재 시간
+    current_time = now_utc + timedelta(hours=9)
+    slack_messages = []
+    header_text = ":rotating_light: *조회 집계 경고* :rotating_light:"
+    for _, row in alerts_df.iterrows():
+        body_text = (
+            f"*🕒 기준 시간:* {current_time:%Y-%m-%d %H:%M:%S}\n\n"
+            f"🚗 *Car:* `{row['car_id']}`\n\n🏆 *Category:* `{row['category']}`\n\n"
+            f"📈 *Change:* `{row['view_change']}`\n\n🔢 *Total:* `{row['total_view']}k`\n\n"
         )
-    print("Slack 알림 전송 완료!")
-    return response.status_code
+        slack_message = {
+            "text": ":eyes: 소셜 트랜드 이상징후 발견",
+            "attachments": [
+                {
+                    "color": "#ff0000",
+                    "blocks": [
+                        {
+                            "type": "header",
+                            "text": {
+                                "type": "plain_text",
+                                "text": header_text,
+                                "emoji": True
+                            }
+                        },
+                        {"type": "divider"},
+                        {
+                            "type": "section",
+                            "fields": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": body_text
+                                }
+                            ]
+                        },
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": f":information_source: 이 메시지는 자동 알림 시스템에 의해 전송되었습니다.\n추가 정보는 {os.getenv('SUPERSET_URL')} 에서 확인하세요"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        slack_messages.append(slack_message)
+    return slack_messages
+
+
+def send_slack_notification(slack_messages, webhook_url: str):
+    """Slack 웹훅 URL로 알림 전송"""
+    if not slack_messages:
+        return 200
+    for slack_message in slack_messages:
+        response = requests.post(
+            webhook_url, data=json.dumps(slack_message),
+            headers={'Content-Type': 'application/json'}
+        )
+        if response.status_code != 200:
+            print(f"Slack 요청 실패: {response.status_code}, 응답:\n{response.text}")
+        else:
+            print("Slack 알림 전송 완료!")
 
 
 def main():
@@ -204,21 +198,20 @@ def main():
         'view_change': 'max',
         'total_view': 'max'
     })
+    print(grouped)
 
     # threshold를 초과하는 alert만 필터링
     alert_df = grouped[grouped['view_change'] > threshold]
     for _, row in alert_df.iterrows():
         print(
-            f"Alert - car_id: {row['car_id']}, category: {row['category']}, view change: {row['view_change']:.2f}, total_view: {row['total_view']}"
-        )
+            f"Alert - car_id: {row['car_id']}, category: {row['category']}, view change: {row['view_change']:.2f}, total_view: {row['total_view']}")
 
     # Slack 웹훅 URL (환경변수에서 불러옴)
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
 
     # Slack 메시지 포맷 및 전송
-    slack_message = format_slack_message(alert_df)
-    send_slack_notification(slack_message, webhook_url)
-    print(slack_message)
+    slack_messages = format_slack_messages(alert_df)
+    send_slack_notification(slack_messages, webhook_url)
 
     return {
         'statusCode': 200,
