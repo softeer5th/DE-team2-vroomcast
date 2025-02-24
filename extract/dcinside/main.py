@@ -130,8 +130,9 @@ class DC_crawler:
     
     def get_entry_point(self, driver:webdriver.Chrome, url):
         """
-        디시인사이드에서 '빠른 이동'기능을 통해 검색 결과들 중 검색 기간의 마지막 날짜로 이동합니다.
-         
+        디시인사이드에서 '빠른 이동'기능을 통해 검색 결과들 중 검색 기간의 마지막 날짜로 이동하는 url을 반환합니다.
+        Returns:
+            이동할 페이지 url
         """
         e_date = self.end_date.split()[0]
         
@@ -440,7 +441,7 @@ class DC_crawler:
 
     def save_json(self, parsed_json:json, post_id:int):
         """
-        
+        수집된 게시글에 대한 정보를 S3에 .json으로 저장합니다.
         """
         file_path = f"extracted/{self.car_id}/{self.folder_date}/{self.batch}/raw/dcinside/{post_id}.json"
         directory = os.path.dirname(file_path)
