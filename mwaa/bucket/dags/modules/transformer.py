@@ -56,7 +56,7 @@ def get_emr_job_flow_overrides(): # EMR 클러스터 설정 반환
         "Applications": EMR_CONFIG["APPLICATIONS"],
         "BootstrapActions": [
             {
-                "Name": "kss-bootstrap",
+                "Name": "kiwi-bootstrap",
                 "ScriptBootstrapAction": {
                     "Path": f"s3://{S3_CONFIG_BUCKET}/"
                     + "{{ var.value.emr_bootstrap_script_path }}"
