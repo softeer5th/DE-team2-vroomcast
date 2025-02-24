@@ -2,13 +2,13 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.models.baseoperator import cross_downstream
-from modules.loader import (
-    TableMapping,
-    create_load_dynamic_to_redshift_task,
-    create_load_dynamic_to_redshift_tasks,
-    create_load_post_car_to_redshift_tasks,
-    create_load_static_to_redshift_tasks,
-)
+
+from modules.loader import (TableMapping, create_load_dynamic_to_redshift_task,
+                            create_load_dynamic_to_redshift_tasks,
+                            create_load_post_car_to_redshift_tasks,
+                            create_load_static_to_redshift_tasks)
+
+from modules.constants import DYNAMIC_MAPPINGS
 
 """
 Redshift로의 적재를 종합적으로 테스트
@@ -64,15 +64,10 @@ with DAG(
     schedule_interval=None,
 ) as dag:
     car_id = "ioniq9"
-    date = "2025-02-23"
+    date = "2025-02-24"
     batch = 570
 
-    table_mappings = [
-        TableMapping("vector_dynamic_post/", "v_post_dynamic", ["id", "extracted_at"]),
-        TableMapping(
-            "vector_dynamic_comment/", "v_comment_dynamic", ["id", "extracted_at"]
-        ),
-    ]
+    table_mappings = DYNAMIC_MAPPINGS
 
     for count, table_mapping in enumerate(table_mappings):
 

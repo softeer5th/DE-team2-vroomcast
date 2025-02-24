@@ -1,6 +1,7 @@
 import json
 
 from airflow import DAG
+
 from modules.constants import S3_BUCKET
 from modules.operators import LambdaInvokeFunctionOperator
 
