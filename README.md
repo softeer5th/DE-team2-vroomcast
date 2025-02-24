@@ -11,18 +11,19 @@
 * 중요 이슈 발생 시 즉각적인 알림 제공
 * 데이터 및 집계 결과 시각화
 
+각 모듈의 기능에 대한 설명은 아래 디렉토리를 참고하세요.
+
 ## 디렉터리 구조
 
-* [.github/workflows](.github/workflows)
-* [combine/](combine)
-* [extract/bobaedream/](extract/bobaedream)
-* [extract/clien/](extract/clien)
-* [extract/dcinside/](extract/dcinside)
-* [load/](load)
-* [mwaa/](mwaa)
-* [notification/](notification)
-* [transform/](transform)
-* [visualize/](visualize)
+* [.github/workflows/](.github/workflows) : Github Actions를 이용한 CI/CD
+* [combine/](combine) : S3에 적재된 크롤링된 데이터를 병합
+* [extract/bobaedream/](extract/bobaedream) : 보배드림 크롤러  
+* [extract/clien/](extract/clien) : 클리앙 크롤러
+* [extract/dcinside/](extract/dcinside) : 디시인사이드 크롤러
+* [mwaa/](mwaa) : 데이터 파이프라인 제어를 위한 Airflow 관련 파일
+* [notification/](notification) : AWS Lambda 기반 Redshift 트렌드 분석 및 Slack 알림 시스템
+* [transform/](transform) : AWS Lambda 기반 데이터 변환 및 감성 분석
+* [visualize/](visualize) : Apache Superset 설치를 위한 가이드
 
 ## 참고 자료
 
