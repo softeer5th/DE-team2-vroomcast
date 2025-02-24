@@ -167,9 +167,11 @@ with DAG(
 
     # Social Alert 태스크 생성
     social_alert_task = create_social_alert_task(dag)
+    social_alert_task.trigger_rule = TriggerRule.ALL_DONE
 
     # Notificate All Done 태스크 생성
     notificate_all_done_task = create_notificate_all_done_task(dag)
+    notificate_all_done_task.trigger_rule = TriggerRule.ALL_DONE
 
     # Terminated EMR >> Analyze Sentiment >> Load Transformed to Redshift
     (
