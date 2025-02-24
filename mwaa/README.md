@@ -42,7 +42,7 @@
 
 ![Image](https://github.com/user-attachments/assets/e24fd0e0-b72a-4e43-845b-95cf1c282d82)
 
-#### 4. S3에 적재된 추출 데이터를 Redshift로 적재합니다.
+#### 4. S3에 적재한 변환된 데이터를 Redshift로 적재합니다.
 
 * 동시에 많은 작업이 실행되는 것을 방지하고자 순서를 부여하였습니다.
 * 각 작업이 실패하더라도 다음 작업이 계속 수행됩니다.
