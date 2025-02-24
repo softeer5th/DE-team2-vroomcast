@@ -42,29 +42,30 @@ COMMUNITIES = _load_config("community.json")
 class TableMapping:
     parquet: str
     table: str
+    columns: list[str]
     keys: list[str]
 
 
 STATIC_PATH = "transformed/{date}/{batch}/{parquet}"
 
 STATIC_MAPPINGS = [
-    TableMapping("post_static/", "post_static", []),
-    TableMapping("comment_static/", "comment_static", []),
-    TableMapping("sentence_sentiment/", "sentence", []),
-    TableMapping("keyword_category/", "keyword_category", []),
+    TableMapping("post_static/", "post_static", ["id", "url", "title", "content", "created_at"], []),
+    TableMapping("comment_static/", "comment_static", ["id", "post_id", "content", "is_reply", "created_at"], []),
+    TableMapping("sentence_sentiment/", "sentence", ["id", "source_id", "from_post", "sentence", "created_at", "sentiment"], []),
+    TableMapping("keyword_category/", "keyword_category", ["sentence_id", "category", "keyword"], []),
 ]
 
 POST_CAR_PATH = "combined/{car_id}/{date}/{batch}/post_car.parquet"
 
-POST_CAR_MAPPING = TableMapping("post_car", "post_car", ["post_id", "car_id"])
+POST_CAR_MAPPING = TableMapping("post_car", "post_car", ["post_id", "car_id"], ["post_id", "car_id"])
 
 DYNAMIC_PATH = "combined/{car_id}/{date}/{batch}/dynamic/{parquet}"
 
 DYNAMIC_MAPPINGS = [
-    TableMapping("post", "post_dynamic", ["id", "extracted_at"]),
-    TableMapping("comment", "comment_dynamic", ["id", "extracted_at"]),
-    TableMapping("vector_dynamic_post/", "v_post_dynamic", ["id", "extracted_at"]),
+    TableMapping("post", "post_dynamic", ["id", "extracted_at", "view_count", "upvote_count", "downvote_count", "comment_count"], ["id", "extracted_at"]),
+    TableMapping("comment", "comment_dynamic", ["id", "extracted_at", "upvote_count", "downvote_count"], ["id", "extracted_at"]),
+    TableMapping("vector_dynamic_post/", "v_post_dynamic", ["id", "extracted_at", "v_view_count", "v_upvote_count", "v_downvote_count", "v_comment_count"], ["id", "extracted_at"]),
     TableMapping(
-        "vector_dynamic_comment/", "v_comment_dynamic", ["id", "extracted_at"]
+        "vector_dynamic_comment/", "v_comment_dynamic", ["id", "extracted_at", "v_upvote_count", "v_downvote_count"], ["id", "extracted_at"]
     ),
 ]
