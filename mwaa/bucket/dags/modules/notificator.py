@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from time import sleep
 
+from pendulum import timezone
 import requests
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -40,7 +41,10 @@ def _generate_community_stats_message(stats: dict[str, dict], **context) -> dict
                 sums[community]["extracted"] += results["extracted_posts_count"]
 
     time_info = pull_time_info(**context)
-    current_datetime = datetime.now()
+
+    KST = timezone("Asia/Seoul")
+    current_datetime = datetime.now(KST)
+
     current_date = current_datetime.strftime("%Y-%m-%d")
     current_time = current_datetime.strftime("%H:%M:%S")
     start_date = pull_from_xcom("start_time", "date", **context)
@@ -166,7 +170,10 @@ def create_notificate_all_done_task(dag: DAG) -> PythonOperator:
         logger.info("Sending notification to Slack")
         start_date = pull_from_xcom("start_time", "date", **context)
         start_time = pull_from_xcom("start_time", "time", **context)
-        current_datetime = datetime.now()
+
+        KST = timezone("Asia/Seoul")
+        current_datetime = datetime.now(KST)
+
         current_date = current_datetime.strftime("%Y-%m-%d")
         current_time = current_datetime.strftime("%H:%M:%S")
         elapsed_time = get_time_diff(start_date, start_time, current_date, current_time)
