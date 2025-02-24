@@ -18,7 +18,7 @@ def get_driver():
     # chrome_options.add_argument("--remote-debugging-pipe")
     chrome_options.add_argument("--verbose")
     # chrome_options.add_argument("--log-path=/tmp")
-    chrome_options.binary_location = "/opt/chrome/chrome-linux64/chrome"
+    chrome_options.binary_location = "/opt/chrome/chrome-linux64/chrome" # 도커 환경에서 사용시 주석 해제하세요.
     # prefs = {
     #     "profile.managed_default_content_settings.images": 2,  # 이미지 비활성화
     #     "profile.managed_default_content_settings.ads": 2,     # 광고 비활성화
@@ -27,7 +27,7 @@ def get_driver():
     # chrome_options.add_experimental_option("prefs", prefs)
 
     service = Service(
-        executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver",
+        executable_path="/opt/chrome-driver/chromedriver-linux64/chromedriver", # 도커 환경에서 사용시 주석 해제하세요.
         # service_log_path="/tmp/chromedriver.log"
     )
     driver = Chrome(
@@ -38,6 +38,7 @@ def get_driver():
     return driver
 
 def lambda_handler(event, context):
+    """AWS Lambda에서 테스트할 용도"""
     print("Starting Test ...")
     try:
         driver = get_driver()
@@ -54,20 +55,23 @@ def lambda_handler(event, context):
         driver.quit()
     else:
         print("🟥 Something Wrong in Code")
-# if __name__=="__main__":
-#     print("Starting Test ...")
-#     try:
-#         driver = get_driver()
-#         print("Chrome driver has set.")
-#     except:
-
-#         print("driver hasn't set.")
-#     if driver:
-#         driver.get("https://www.google.com")
-#         print("Page title:", driver.title)
-#         driver.quit()        
         
-#         print("Test Successfully Ended")
-#         driver.quit()
-#     else:
-#         print("Something Wrong in Code")
+if __name__=="__main__":
+    """로컬 및 도커 컨테이너에서 테스트 할 용도"""
+    print("Starting Test ...")
+    try:
+        driver = get_driver()
+        print("Chrome driver has set.")
+    except:
+        print("driver hasn't set.")
+        exit(0)
+        
+    if driver:
+        driver.get("https://www.google.com")
+        print("Page title:", driver.title)
+        driver.quit()        
+        
+        print("Test Successfully Ended")
+        driver.quit()
+    else:
+        print("Something Wrong in Code")
