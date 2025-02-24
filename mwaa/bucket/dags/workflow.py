@@ -155,7 +155,7 @@ with DAG(
     analyze_sentiment_task = create_analyze_sentiment_task(dag, ref_date, batch)
 
     # Redshift로의 적재 태스크 생성
-    load_dynamic_toredshift_tasks = create_load_dynamic_to_redshift_tasks(
+    load_dynamic_to_redshift_tasks = create_load_dynamic_to_redshift_tasks(
         dag, ref_date, batch
     )
     load_post_car_to_redshift_tasks = create_load_post_car_to_redshift_tasks(
@@ -178,11 +178,17 @@ with DAG(
         >> load_transformed_to_redshift_tasks
     )
 
+    for load_dynamic_to_redshift_task in load_dynamic_to_redshift_tasks:
+        load_dynamic_to_redshift_task.trigger_rule = TriggerRule.ALL_DONE
+
     # Load Transformed to Redshift >> Load Dynamic to Redshift
-    cross_downstream(load_transformed_to_redshift_tasks, load_dynamic_toredshift_tasks)
+    cross_downstream(load_transformed_to_redshift_tasks, load_dynamic_to_redshift_tasks)
+
+    for load_post_car_to_redshift_task in load_post_car_to_redshift_tasks:
+        load_post_car_to_redshift_task.trigger_rule = TriggerRule.ALL_DONE
 
     # Load Dynamic to Redshift >> Load Post Car to Redshift
-    cross_downstream(load_dynamic_toredshift_tasks, load_post_car_to_redshift_tasks)
+    cross_downstream(load_dynamic_to_redshift_tasks, load_post_car_to_redshift_tasks)
 
     # Load Post Car to Redshift >> Social Alert >> Notificate All Done
     load_post_car_to_redshift_tasks >> social_alert_task >> notificate_all_done_task
