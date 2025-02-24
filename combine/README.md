@@ -11,7 +11,7 @@
  ┣ 📜.gitignore
  ┣ 📜.python-version
  ┣ 📜README.md
- ┣ 📜main.py			# 메인 파일
+ ┣ 📜main.py		# 메인 파일
  ┣ 📜poetry.lock
  ┗ 📜pyproject.toml
 ```
