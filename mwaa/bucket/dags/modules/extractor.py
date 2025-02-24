@@ -1,9 +1,7 @@
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from airflow import DAG
-from airflow.models import Variable
-from botocore.config import Config
 from modules.constants import S3_BUCKET
 from modules.operators import LambdaInvokeFunctionOperator
 
@@ -19,7 +17,18 @@ def create_extract_task(
     end_datetime: str,
 ) -> LambdaInvokeFunctionOperator:
     """
-    Extract Lambda를 호출하는 Task를 생성합니다.
+    커뮤니티 반응을 추출하는 Lambda를 호출하는 Task를 생성합니다.
+    Args:
+        dag (DAG): Airflow DAG
+        community (str): 커뮤니티
+        car_id (str): 차량 ID
+        keywords (list[str]): 키워드
+        date (str): 날짜
+        batch (int): 배치
+        start_datetime (str): 시작 시각
+        end_datetime (str): 종료 시각
+    Returns:
+        LambdaInvokeFunctionOperator: Task
     """
     return LambdaInvokeFunctionOperator(
         task_id=f"extract_{car_id}_{community}",

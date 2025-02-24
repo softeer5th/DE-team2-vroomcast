@@ -4,7 +4,9 @@ x-airflow-common: &airflow-common
     dockerfile: Dockerfile
     args:
       AIRFLOW_HOME: ${AIRFLOW_HOME:-/opt/airflow}
+  # 환경 변수
   environment: &airflow-common-env
+    # 기본 환경 변수
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Seoul
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -17,43 +19,24 @@ x-airflow-common: &airflow-common
     AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
     AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
-    # AIRFLOW_CONN_AWS_DEFAULT: aws:///?aws_access_key_id=${AWS_ACCESS_KEY_ID}&aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}&region_name=ap-northeast-2&read_timeout=900
     # Airflow Variables
     AIRFLOW_VAR_S3_BUCKET: ${AIRFLOW_VAR_S3_BUCKET}
     AIRFLOW_VAR_S3_CONFIG_BUCKET: ${AIRFLOW_VAR_S3_CONFIG_BUCKET}
     AIRFLOW_VAR_BATCH_INTERVAL_MINUTES: ${AIRFLOW_VAR_BATCH_INTERVAL_MINUTES:-30}
     AIRFLOW_VAR_BATCH_DURATION_HOURS: ${AIRFLOW_VAR_BATCH_DURATION_HOURS:-24}
-    # EMR Variables
-    AIRFLOW_VAR_EMR_BASE_LOG_URI: ${AIRFLOW_VAR_EMR_BASE_LOG_URI}
-    AIRFLOW_VAR_EMR_SERVICE_ROLE: ${AIRFLOW_VAR_EMR_SERVICE_ROLE}
-    AIRFLOW_VAR_EMR_EC2_ROLE: ${AIRFLOW_VAR_EMR_EC2_ROLE}
-    AIRFLOW_VAR_EMR_SUBNET_ID: ${AIRFLOW_VAR_EMR_SUBNET_ID}
-    AIRFLOW_VAR_EMR_KEY_PAIR: ${AIRFLOW_VAR_EMR_KEY_PAIR}
-    AIRFLOW_VAR_EMR_MASTER_SG: ${AIRFLOW_VAR_EMR_MASTER_SG}
-    AIRFLOW_VAR_EMR_SLAVE_SG: ${AIRFLOW_VAR_EMR_SLAVE_SG}
-    AIRFLOW_VAR_EMR_BOOTSTRAP_SCRIPT_PATH: ${AIRFLOW_VAR_EMR_BOOTSTRAP_SCRIPT_PATH}
-    AIRFLOW_VAR_EMR_SCRIPT_PATH: ${AIRFLOW_VAR_EMR_SCRIPT_PATH}
-    # Redshift Variables
-    AIRFLOW_VAR_REDSHIFT_DATABASE: ${AIRFLOW_VAR_REDSHIFT_DATABASE}
-    AIRFLOW_VAR_REDSHIFT_SCHEMA: ${AIRFLOW_VAR_REDSHIFT_SCHEMA}
-    AIRFLOW_VAR_REDSHIFT_IAM_ROLE: ${AIRFLOW_VAR_REDSHIFT_IAM_ROLE}
-    AIRFLOW_VAR_REDSHIFT_USER: ${AIRFLOW_VAR_REDSHIFT_USER}
-    AIRFLOW_VAR_REDSHIFT_PASSWORD: ${AIRFLOW_VAR_REDSHIFT_PASSWORD}
-    AIRFLOW_VAR_REDSHIFT_REGION: ${AIRFLOW_VAR_REDSHIFT_REGION}
-    AIRFLOW_VAR_REDSHIFT_WORKGROUP: ${AIRFLOW_VAR_REDSHIFT_WORKGROUP}
-    AIRFLOW_VAR_REDSHIFT_SECRET_ARN: ${AIRFLOW_VAR_REDSHIFT_SECRET_ARN}
     # Slack Variables
     AIRFLOW_VAR_SLACK_WEBHOOK_URL: ${AIRFLOW_VAR_SLACK_WEBHOOK_URL}
-
+  # 필요한 볼륨 마운트
   volumes:
     - ./bucket/dags:${AIRFLOW_HOME:-/opt/airflow}/dags
     - ./bucket/configs:${AIRFLOW_HOME:-/opt/airflow}/configs
+  # 의존성 설정
   depends_on: &airflow-common-depends-on
     postgres:
       condition: service_healthy
 
 services:
-  postgres:
+  postgres: # Airflow의 메타 데이터를 저장하는 데이터베이스
     image: postgres:13
     environment:
       POSTGRES_USER: airflow
@@ -65,7 +48,7 @@ services:
       retries: 5
     restart: always
 
-  airflow-init:
+  airflow-init: # Airflow 초기화: 데이터베이스 초기화 및 관리자 계정 생성
     <<: *airflow-common
     entrypoint: /bin/bash
     command: -c "airflow db init && airflow users create --username admin --password admin --firstname Anonymous --lastname Admin --role Admin --email admin@example.com"
@@ -73,7 +56,7 @@ services:
       postgres:
         condition: service_healthy
 
-  airflow-webserver:
+  airflow-webserver: # Airflow의 웹 UI를 제공
     <<: *airflow-common
     command: airflow webserver
     ports:
@@ -85,7 +68,7 @@ services:
       retries: 5
     restart: always
 
-  airflow-scheduler:
+  airflow-scheduler: # DAG 정보를 파싱하고 작업을 스케줄링 및 모니터링
     <<: *airflow-common
     command: airflow scheduler
     healthcheck:

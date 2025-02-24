@@ -13,9 +13,23 @@ logger.setLevel(logging.INFO)
 
 
 def create_synchronize_task(dag, batch_json_path: str):
-    """S3의 json 파일을 읽고 현재 배치 정보를 추가하는 태스크 생성"""
+    """
+    S3의 json 파일을 읽고 현재 배치 정보를 추가하는 태스크 생성
+    Args:
+        dag (DAG): Airflow DAG
+        batch_json_path (str): 배치 정보를 저장하는 json 파일 경로
+    Returns:
+        PythonOperator: Task
+    """
 
-    def _synchronize_batch(**context):
+    def _synchronize_batch(**context) -> dict:
+        """
+        과거 배치 정보를 읽고 현재 배치 정보를 추가하여 S3에 저장합니다.
+        Args:
+            **context: Airflow context
+        Returns:
+            dict: 현재 배치 정보
+        """
         s3_hook = S3Hook()
 
         # 현재 배치 정보

@@ -10,6 +10,10 @@ from modules.loader import (
     create_load_static_to_redshift_tasks,
 )
 
+"""
+Redshift로의 적재를 종합적으로 테스트
+"""
+
 with DAG(
     dag_id="test_copy_s3_to_redshift",
     start_date=datetime(2024, 2, 19),
@@ -29,7 +33,6 @@ with DAG(
         date, batch = folder
         identifier = f"{count}"
 
-        # Create task groups for current folder
         current_transformed_tasks = create_load_static_to_redshift_tasks(
             dag, date, batch, identifier
         )
@@ -40,18 +43,18 @@ with DAG(
             dag, date, batch, identifier
         )
 
-        # Group all current tasks
         current_tasks = (
             current_transformed_tasks + current_combined_tasks + current_post_car_tasks
         )
 
-        # Create cross-downstream dependency with previous folder's tasks
         if previous_tasks is not None:
             cross_downstream(from_tasks=previous_tasks, to_tasks=current_tasks)
 
-        # Update previous_tasks for next iteration
         previous_tasks = current_tasks
 
+"""
+벡터 데이터 적재를 테스트
+"""
 with DAG(
     dag_id="test_copy_v_dynamic_data_to_redshift",
     start_date=datetime(2024, 2, 19),

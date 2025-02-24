@@ -7,13 +7,17 @@ from modules.constants import CARS
 from modules.extractor import create_extract_task
 from modules.notificator import create_notificate_extract_task
 
+"""
+커뮤니티 반응 추출 테스트
+"""
+
 with DAG(
     dag_id="test_extractor",
     start_date=datetime(2024, 2, 19),
     default_args={
         "owner": "airflow",
     },
-    params={  # DAG 레벨의 기본 params 설정
+    params={ # Web UI에서 설정 가능한 파라미터
         "community": "bobaedream",
         "date": "2020-01-05",
         "batch": 0,
@@ -26,7 +30,6 @@ with DAG(
 
     for car_id, keywords in CARS.items():
         # Extract 태스크 생성
-
         extract_task = create_extract_task(
             dag,
             dag.params["community"],
@@ -40,7 +43,7 @@ with DAG(
 
         extract_tasks.append(extract_task)
 
-        # Aggregate 태스크 생성
+    # Aggregate 태스크 생성
     aggregate_task = create_aggregate_task(dag)
     aggregate_task.trigger_rule = TriggerRule.ALL_DONE
 

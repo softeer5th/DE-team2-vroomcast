@@ -5,6 +5,10 @@ from airflow.operators.python import PythonOperator
 from modules.notificator import create_notificate_extract_task
 from utils.time import create_push_time_task
 
+"""
+알림 기능 테스트
+"""
+
 with DAG(
     dag_id="test_notification",
     start_date=datetime(2024, 2, 19),
@@ -26,7 +30,8 @@ with DAG(
 
     push_time_task = create_push_time_task(dag, ref_date, ref_time, batch)
 
-    def extract(**context):
+    # 더미 데이터 반환 함수
+    def aggregate(**context):
         return {
             "ev9": {
                 "bobaedream": {
@@ -90,12 +95,14 @@ with DAG(
             },
         }
 
+    # 더미 집계 태스크
     aggregate_task = PythonOperator(
         task_id="aggregate_task",
-        python_callable=extract,
+        python_callable=aggregate,
         dag=dag,
     )
 
+    # 알림 태스크 생성
     notificate_task = create_notificate_extract_task(dag)
 
     push_time_task >> aggregate_task >> notificate_task

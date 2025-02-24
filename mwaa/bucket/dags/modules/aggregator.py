@@ -5,10 +5,24 @@ from airflow.operators.python import PythonOperator
 from modules.constants import CARS, COMMUNITIES
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.INFO)
 
 def create_aggregate_task(dag: DAG) -> PythonOperator:
+    """
+    추출 결과 집계 Task을 생성합니다.
+    Args:
+        dag (DAG): Airflow DAG
+    Returns:
+        PythonOperator: Task
+    """
     def _aggregate(**context) -> dict:
+        """
+        모든 추출 Task에 대한 집계를 수행합니다.
+        Args:
+            **context: Airflow context
+        Returns:
+            dict: 집계된 통계
+        """
         logger.info("Starting aggregation for all extract tasks")
         task_instance = context["task_instance"]
         statistics = {}

@@ -23,6 +23,14 @@ def create_load_static_to_redshift_task(
 ) -> S3ToRedshiftOperator:
     """
     정적 데이터를 Redshift로 로드하는 Task를 생성합니다.
+    Args:
+        dag (DAG): Airflow DAG
+        date (str): 날짜
+        batch (int): 배치
+        table_mapping (TableMapping): 테이블 매핑 정보
+        identifier (str, optional): Task 식별자. Defaults to None.
+    Returns:
+        S3ToRedshiftOperator: Task
     """
 
     return S3ToRedshiftOperator(
@@ -48,7 +56,15 @@ def create_load_static_to_redshift_tasks(
     dag: DAG, date: str, batch: int, identifier: str | None = None
 ) -> list[S3ToRedshiftOperator]:
     """
-    정적 데이터를 Redshift로 로드하는 Task들을 생성합니다.
+    정적 데이터를 Redshift로 로드하는 Task 목록을 반환합니다.
+        예: 제목, 내용, 작성 날짜 등
+    Args:
+        dag (DAG): Airflow DAG
+        date (str): 날짜
+        batch (int): 배치
+        identifier (str, optional): Task 식별자. Defaults to None.
+    Returns:
+        list[S3ToRedshiftOperator]:
     """
     return [
         create_load_static_to_redshift_task(dag, date, batch, table_mapping, identifier)
@@ -66,6 +82,15 @@ def create_load_dynamic_to_redshift_task(
 ) -> S3ToRedshiftOperator:
     """
     동적 데이터를 Redshift로 로드하는 Task를 생성합니다.
+    Args:
+        dag (DAG): Airflow DAG
+        car_id (str): 차량 ID
+        date (str): 날짜
+        batch (int): 배치
+        table_mapping (TableMapping): 테이블 매핑 정보
+        identifier (str, optional): Task 식별자. Defaults to None.
+    Returns:
+        S3ToRedshiftOperator: Task
     """
 
     return S3ToRedshiftOperator(
@@ -93,7 +118,15 @@ def create_load_dynamic_to_redshift_tasks(
     dag: DAG, date: str, batch: int, identifier: str | None = None
 ) -> list[S3ToRedshiftOperator]:
     """
-    동적 데이터를 Redshift로 로드하는 Task들을 생성합니다.
+    동적 데이터를 Redshift로 로드하는 Task 목록을 반환합니다.
+        예: 조회수, 댓글 수, 좋아요 수 등
+    Args:
+        dag (DAG): Airflow DAG
+        date (str): 날짜
+        batch (int): 배치
+        identifier (str, optional): Task 식별자. Defaults to None.
+    Returns:
+        list[S3ToRedshiftOperator]: Task 목록
     """
     return [
         create_load_dynamic_to_redshift_task(
@@ -114,6 +147,15 @@ def create_load_post_car_to_redshift_task(
 ) -> S3ToRedshiftOperator:
     """
     Post를 검색한 키워드를 매핑한 데이터를 Redshift로 로드하는 Task를 생성합니다.
+    Args:
+        dag (DAG): Airflow DAG
+        car_id (str): 차량 ID
+        date (str): 날짜
+        batch (int): 배치
+        table_mapping (TableMapping): 테이블 매핑 정보
+        identifier (str, optional): Task 식별자. Defaults to None.
+    Returns:
+        S3ToRedshiftOperator: Task
     """
     return S3ToRedshiftOperator(
         task_id=f"load_{car_id}_{table_mapping.table}_to_redshift"
@@ -138,7 +180,14 @@ def create_load_post_car_to_redshift_tasks(
     dag: DAG, date: str, batch: int, identifier: str | None = None
 ) -> list[S3ToRedshiftOperator]:
     """
-    Post를 검색한 키워드를 매핑한 데이터를 Redshift로 로드하는 Task들을 생성합니다.
+    Post를 검색한 키워드를 매핑한 데이터를 Redshift로 로드하는 Task 목록을 반환합니다.
+    Args:
+        dag (DAG): Airflow DAG
+        date (str): 날짜
+        batch (int): 배치
+        identifier (str, optional): Task 식별자. Defaults to None.
+    Returns:
+        list[S3ToRedshiftOperator]: Task 목록
     """
     return [
         create_load_post_car_to_redshift_task(

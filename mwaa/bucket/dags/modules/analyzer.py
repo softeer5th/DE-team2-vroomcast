@@ -12,6 +12,12 @@ def create_analyze_sentiment_task(
 ) -> LambdaInvokeFunctionOperator:
     """
     감성 분석을 수행하는 Lambda를 호출하는 Task를 생성합니다.
+    Args:
+        dag (DAG): Airflow DAG
+        date (str): 날짜
+        batch (int): 배치
+    Returns:
+        LambdaInvokeFunctionOperator: Task
     """
     return LambdaInvokeFunctionOperator(
         task_id=f"analyze_sentiment",
