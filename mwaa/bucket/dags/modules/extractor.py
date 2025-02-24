@@ -35,5 +35,6 @@ def create_extract_task(
                 "end_datetime": end_datetime,
             }
         ),
+        execution_timeout=timedelta(minutes=14),
         dag=dag,
     )
