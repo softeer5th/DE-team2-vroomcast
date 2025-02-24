@@ -2,13 +2,11 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.models.baseoperator import cross_downstream
-from modules.loader import (
-    TableMapping,
-    create_load_dynamic_to_redshift_task,
-    create_load_dynamic_to_redshift_tasks,
-    create_load_post_car_to_redshift_tasks,
-    create_load_static_to_redshift_tasks,
-)
+
+from modules.loader import (TableMapping, create_load_dynamic_to_redshift_task,
+                            create_load_dynamic_to_redshift_tasks,
+                            create_load_post_car_to_redshift_tasks,
+                            create_load_static_to_redshift_tasks)
 
 """
 Redshift로의 적재를 종합적으로 테스트
