@@ -240,8 +240,10 @@ def transform_static_data(post_df: DataFrame | None, comment_df: DataFrame | Non
     logger.info(
         f"Write post static and comment static to {mode}{bucket}/{output_dir}/post_static and {mode}{bucket}/{output_dir}/comment_static"
     )
-    post_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/post_static")
-    comment_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/comment_static")
+    if post_df is not None:
+        post_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/post_static")
+    if comment_df is not None:
+        comment_df.write.mode("overwrite").parquet(f"{mode}{bucket}/{output_dir}/comment_static")
 
     logger.info(
         f"Post and Comment Static Write Complete. {mode}{bucket}/{output_dir}/post_static, {mode}{bucket}/{output_dir}/comment_static"
