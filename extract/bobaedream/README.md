@@ -12,12 +12,12 @@
  ┣ 📜.python-version
  ┣ 📜Dockerfile
  ┣ 📜README.md
- ┣ 📜main.py						# main 파일
+ ┣ 📜main.py                       # main 파일
  ┣ 📜poetry.lock
- ┣ 📜post_extractor.py				# 단일 URL에 대한 게시글 추출			
- ┣ 📜post_info_list_extractor.py	# 특정 키워드에 대한 게시글 목록 반환
+ ┣ 📜post_extractor.py             # 단일 URL에 대한 게시글 추출			
+ ┣ 📜post_info_list_extractor.py   # 특정 키워드에 대한 게시글 목록 반환
  ┣ 📜pyproject.toml
- ┗ 📜test.py						# 테스트 코드
+ ┗ 📜test.py                       # 테스트 코드
 ```
 
 ## 이분 탐색 전략
