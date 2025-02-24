@@ -13,7 +13,7 @@ def create_table_as_select():
     cursor = conn.cursor()
     create_query = """
         CREATE TABLE public.v_total_trend_dup AS
-        SELECT *
+        SELECT batch_time, car_id, category, total_view, total_comment, total_upvote, total_downvote
         FROM (
             SELECT 
                 *,
