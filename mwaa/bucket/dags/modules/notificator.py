@@ -8,6 +8,8 @@ from airflow.operators.python import PythonOperator
 from modules.constants import SLACK_WEBHOOK_URL
 from utils.time import pull_time_info
 
+from modules.operators import LambdaInvokeFunctionOperator
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -83,3 +85,10 @@ def create_notificate_all_done_task(dag: DAG) -> PythonOperator:
         task_id="notificate_all_done_task", python_callable=_notificate, dag=dag
     )
     return notificate_all_done_task
+
+def create_social_alert_task(dag: DAG) -> LambdaInvokeFunctionOperator:
+    return LambdaInvokeFunctionOperator(
+        task_id=f"social_alert",
+        function_name=f"vroomcast-social-alert",
+        dag=dag,
+    )

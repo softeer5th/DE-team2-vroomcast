@@ -25,6 +25,7 @@ from modules.loader import (
 from modules.notificator import (
     create_notificate_all_done_task,
     create_notificate_extract_task,
+    create_social_alert_task
 )
 from modules.synchronizer import create_synchronize_task
 from modules.transformer import (
@@ -159,6 +160,8 @@ with DAG(
         dag, ref_date, batch
     )
 
+    social_alert_task = create_social_alert_task(dag)
+
     notificate_all_done_task = create_notificate_all_done_task(dag)
 
     (
@@ -171,4 +174,4 @@ with DAG(
 
     cross_downstream(load_dynamic_toredshift_tasks, load_post_car_to_redshift_tasks)
 
-    load_post_car_to_redshift_tasks >> notificate_all_done_task
+    load_post_car_to_redshift_tasks >> social_alert_task >> notificate_all_done_task
