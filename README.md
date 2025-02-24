@@ -23,6 +23,7 @@
 * [mwaa/](mwaa) : 데이터 파이프라인 제어를 위한 Airflow 관련 파일
 * [notification/](notification) : AWS Lambda 기반 Redshift 트렌드 분석 및 Slack 알림 시스템
 * [transform/](transform) : AWS Lambda 기반 데이터 변환 및 감성 분석
+* [transfrom/main](transform/main) : spark 기반 데이터 변환과 spark 최적화
 * [visualize/](visualize) : Apache Superset 설치를 위한 가이드
 
 ## 참고 자료
