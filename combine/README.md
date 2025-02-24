@@ -4,6 +4,18 @@
 
 크롤링 후 S3에 저장된 게시글  JSON 파일들을 Parquet 형식으로 합쳐 적재합니다.
 
+## 디렉터리 구조
+
+```
+📦combine
+ ┣ 📜.gitignore
+ ┣ 📜.python-version
+ ┣ 📜README.md
+ ┣ 📜main.py			# 메인 파일
+ ┣ 📜poetry.lock
+ ┗ 📜pyproject.toml
+```
+
 ## 기능 설명
 
 1. S3로부터 JSON 파일을 하나씩 읽습니다.
