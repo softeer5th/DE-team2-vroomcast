@@ -25,6 +25,22 @@
 </tr>
 </tbody></table>
 
+## 디렉터리 구조
+
+* [combine/](combine)
+* [extract/bobaedream/](extract/bobaedream)
+* [extract/clien/](extract/clien)
+* [extract/dcinside/](extract/dcinside)
+* [load/](load)
+* [mwaa/](mwaa)
+* [notification/](notification)
+* [transform/](transform)
+* [visualize/](visualize)
+
+## 시연 영상
+
+* [유튜브 링크](www.youtube.com)
+
 ## 아키텍처
 
 ![Image](https://github.com/user-attachments/assets/a66f423b-1965-40a0-b149-cb2d4b69ae3c)
