@@ -178,3 +178,7 @@ cython_debug/
 /hyundai*
 /superset
 .DS_Store
+
+#------------
+.ipynb
+/no_tracking
