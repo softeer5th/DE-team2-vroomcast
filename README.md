@@ -26,7 +26,7 @@
 
 ## 참고 자료
 
-* [유튜브 시연 영상](www.youtube.com)
+* [유튜브 시연 영상](https://youtu.be/T4YReov0K7w)
 * [Notion](https://striped-wineberry-0a1.notion.site/1904f557972a8000b47bf42771d734e9)
 
 ## 아키텍처
