@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - transform/emr
+      - transform/main
     paths:
       - 'transform/main/**'
 
