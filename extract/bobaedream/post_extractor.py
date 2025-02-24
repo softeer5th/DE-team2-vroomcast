@@ -4,9 +4,21 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
+"""
+단일 게시글의 정보를 추출합니다.
+"""
+
 
 def _fetch_post(url: str) -> str | None:
+    """
+    게시글 HTML을 가져옵니다.
+    Args:
+        url (str): 게시글 URL
+    Returns:
+        str: 게시글 HTML
+    """
     try:
+        # 크롤링 차단 방지를 위한 헤더 설정
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -23,11 +35,24 @@ def _fetch_post(url: str) -> str | None:
 
 
 def _get_soup(html: str) -> BeautifulSoup:
+    """
+    BeautifulSoup 객체를 반환합니다.
+    Args:
+        html (str): HTML 문자열
+    Returns:
+        BeautifulSoup: BeautifulSoup 객체
+    """
     return BeautifulSoup(html, "html.parser")
 
 
 def _convert_to_iso_format(date_str: str) -> str:
-    """날짜를 ISO 형식으로 변환"""
+    """
+    날짜 문자열을 ISO 형식으로 변환합니다.
+    Args:
+        date_str (str): 날짜 문자열
+    Returns:
+        str: ISO 형식의 날짜 문자열
+    """
     pattern = r"(\d+)\.(\d+)\.(\d+)\D+(\d+):(\d+)"
     match = re.search(pattern, date_str)
     if not match:
@@ -53,7 +78,13 @@ def _convert_to_iso_format(date_str: str) -> str:
 
 
 def _parse_post_title(soup: BeautifulSoup) -> str:
-    """게시글 제목 파싱"""
+    """
+    게시글 제목 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        str: 게시글 제목
+    """
     title_elem = soup.select_one(".writerProfile dt strong")
     if title_elem:
         title = title_elem.get_text().split("[")[0].strip()
@@ -62,7 +93,13 @@ def _parse_post_title(soup: BeautifulSoup) -> str:
 
 
 def _parse_post_content(soup: BeautifulSoup) -> str:
-    """게시글 본문 내용 파싱"""
+    """
+    게시글 본문 내용 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        str: 게시글 본문 내용
+    """
     content_elem = soup.select_one(".bodyCont")
     if content_elem:
         return content_elem.get_text(strip=True)
@@ -70,7 +107,13 @@ def _parse_post_content(soup: BeautifulSoup) -> str:
 
 
 def _parse_post_created_at(soup: BeautifulSoup) -> str:
-    """작성 날짜 파싱"""
+    """
+    작성 날짜 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        str: 작성 날짜
+    """
     date_elem = soup.select_one(".writerProfile .countGroup")
     if date_elem:
         # extract date from text like "조회 433 | 추천 0 | 2025.02.10 (월) 08:25"
@@ -81,7 +124,13 @@ def _parse_post_created_at(soup: BeautifulSoup) -> str:
 
 
 def _parse_post_view_count(soup: BeautifulSoup) -> int:
-    """조회수 파싱"""
+    """
+    조회수 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        int: 조회수
+    """
     view_elem = soup.select_one(".writerProfile .countGroup .txtType")
     if view_elem:
         try:
@@ -92,7 +141,13 @@ def _parse_post_view_count(soup: BeautifulSoup) -> int:
 
 
 def _parse_post_upvote_count(soup: BeautifulSoup) -> int:
-    """추천수 파싱"""
+    """
+    추천수 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        int: 추천수
+    """
     upvote_elem = soup.select(".writerProfile .countGroup .txtType")[1]
     if upvote_elem:
         try:
@@ -103,7 +158,13 @@ def _parse_post_upvote_count(soup: BeautifulSoup) -> int:
 
 
 def _parse_post_comment_count(soup: BeautifulSoup) -> int:
-    """댓글 수 파싱"""
+    """
+    댓글 수 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        int: 댓글 수
+    """
     comment_elem = soup.select_one(".writerProfile dt strong em")
     if comment_elem:
         try:
@@ -116,7 +177,13 @@ def _parse_post_comment_count(soup: BeautifulSoup) -> int:
 
 
 def _parse_comment(comment_tag: BeautifulSoup) -> dict[str, str | int]:
-    """댓글 파싱"""
+    """
+    댓글 파싱
+    Args:
+        comment_tag (BeautifulSoup): 댓글 태그
+    Returns:
+        dict: 댓글 정보
+    """
 
     content_tag = comment_tag.select_one("dd")
     dt_tag = comment_tag.select_one("dt")
@@ -160,7 +227,13 @@ def _parse_comment(comment_tag: BeautifulSoup) -> dict[str, str | int]:
 
 
 def _parse_comments(soup: BeautifulSoup) -> list[dict[str, str | int]]:
-    """전체 댓글 목록 파싱"""
+    """
+    전체 댓글 목록 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+    Returns:
+        list: 댓글 목록
+    """
     comments = []
 
     comment_list = soup.select_one("ul.basiclist#cmt_reply")
@@ -176,12 +249,27 @@ def _parse_comments(soup: BeautifulSoup) -> list[dict[str, str | int]]:
     return comments
 
 
-def _parse_post(soup: BeautifulSoup, url: str, id: str, start_datetime: str, end_datetime: str) -> dict[str, str | int] | None:
+def _parse_post(
+    soup: BeautifulSoup, url: str, id: str, start_datetime: str, end_datetime: str
+) -> dict[str, str | int] | None:
+    """
+    단일 게시글 정보 파싱
+    Args:
+        soup (BeautifulSoup): BeautifulSoup 객체
+        url (str): 게시글 URL
+        id (str): 게시글 ID
+        start_datetime (str): 시작 날짜 (유효 날짜 확인 용도)
+        end_datetime (str): 종료 날짜 (유효 날짜 확인 용도)
+    Returns:
+        dict: 게시글 정보
+    """
     created_at = _parse_post_created_at(soup)
 
+    # 게시글이 시작 날짜와 종료 날짜 사이에 작성되지 않은 경우
     if created_at < start_datetime or created_at > end_datetime:
         return None
 
+    # 게시글의 각 구성 요소 파싱
     title = _parse_post_title(soup)
     content = _parse_post_content(soup)
     view_count = _parse_post_view_count(soup)
@@ -204,11 +292,30 @@ def _parse_post(soup: BeautifulSoup, url: str, id: str, start_datetime: str, end
     }
 
 
-def extract_post(url: str, id: str, start_datetime: str, end_datetime: str) -> tuple[dict[str, str | int], bool]:
+def extract_post(
+    url: str, id: str, start_datetime: str, end_datetime: str
+) -> tuple[dict[str, str | int], bool]:
+    """
+    게시글 정보 추출
+    Args:
+        url (str): 게시글 URL
+        id (str): 게시글 ID
+        start_datetime (str): 시작 날짜 (유효 날짜 확인 용도)
+        end_datetime (str): 종료 날짜 (유효 날짜 확인 용도)
+    Returns:
+        tuple: 게시글 정보, Request 성공 여부
+    """
+
+    # 게시글 HTML 가져오기
     html = _fetch_post(url)
 
+    # 게시글 HTML이 없는 경우
     if not html:
+        # Request 실패 여부 반환
         return None, False
 
+    # BeautifulSoup 객체 생성
     soup = _get_soup(html)
+
+    # 파싱하여 게시글 정보 반환
     return _parse_post(soup, url, id, start_datetime, end_datetime), True
