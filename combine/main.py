@@ -4,7 +4,11 @@ import os
 from datetime import datetime
 from itertools import islice
 import re
+<<<<<<< HEAD
 from typing import Any
+=======
+from typing import Any, Generator
+>>>>>>> 70e09d3 (docs: add comments)
 
 import boto3
 import pyarrow as pa
@@ -13,14 +17,14 @@ import pyarrow.parquet as pq
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# S3 파일 경로
 EXTRACTED_PATH = "extracted/{car_id}/{date}/{batch}/raw/"
 ID_PATH = "id_set.txt"
-
 POST_PATH = "combined/{car_id}/{date}/{batch}/{type}/post_{chunk}.parquet"
 COMMENT_PATH = "combined/{car_id}/{date}/{batch}/{type}/comment_{chunk}.parquet"
-
 POST_CAR_PATH = "combined/{car_id}/{date}/{batch}/post_car.parquet"
 
+# 추출된 JSON을 Parqeut로 합칠 때 사용하는 스키마
 POST_STATIC_SCHEMA = pa.schema(
     [
         pa.field("id", pa.string(), nullable=False),
@@ -69,16 +73,42 @@ POST_CAR_SCHEMA = pa.schema(
 )
 
 def _parse_datetime(date_str: str) -> datetime:
+    """
+    ISO 8601 형식의 문자열을 datetime 객체로 변환
+    Args:
+        date_str (str): ISO 8601 형식의 문자열
+    Returns:
+        datetime: 변환된 datetime 객체
+    """
     return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
 
 def _extract_community_from_path(path: str) -> str:
-    # extracted/{car_id}/{date}/raw/{community}/{post_id}.json 형식에서 community 추출
+    """
+    S3 경로에서 community를 추출
+    Args:
+        path (str): S3 경로
+    Returns:
+        str: 추출된 community
+    """
+
+    # extracted/{car_id}/{date}/{batch}/raw/{community}/{post_id}.json 형식에서 community 추출
     match = re.search(r'raw/([^/]+)/[^/]+\.json$', path)
     if not match:
         raise ValueError(f"Invalid path format: {path}")
     return match.group(1)
 
-def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str, batch: int):
+def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str, batch: int) -> list[str]:
+    """
+    S3에서 추출된 데이터 파일 경로 목록을 가져옴
+    Args:
+        s3 (Any): boto3 S3 클라이언트
+        bucket (str): S3 버킷 이름
+        car_id (str): 차량 ID
+        date (str): 날짜
+        batch (int): 배치 번호
+    Returns:
+        list[str]: 추출된 데이터 파일 경로 목록
+    """
     matched_files = []
     paginator = s3.get_paginator('list_objects_v2')
     prefix = EXTRACTED_PATH.format(car_id=car_id, date=date, batch=batch)
@@ -92,6 +122,14 @@ def _get_extracted_data_paths(s3: Any, bucket: str, car_id: str, date: str, batc
     return matched_files
 
 def read_id_set(s3: Any, bucket: str) -> set[str]:
+    """
+    S3에 저장된 ID 집합을 가져옴
+    Args:
+        s3 (Any): boto3 S3 클라이언트
+        bucket (str): S3 버킷 이름
+    Returns:
+        set[str]: ID 집합
+    """
     try:
         response = s3.get_object(Bucket=bucket, Key=ID_PATH)
         text: str = response["Body"].read().decode("utf-8")
@@ -100,7 +138,18 @@ def read_id_set(s3: Any, bucket: str) -> set[str]:
     except s3.exceptions.NoSuchKey:
         return set()
 
-def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str, batch: int):
+def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str, batch: int) -> Generator[dict, None, None]:
+    """
+    S3에서 추출된 데이터를 읽어서 반환
+    Args:
+        s3 (Any): boto3 S3 클라이언트
+        bucket (str): S3 버킷 이름
+        car_id (str): 차량 ID
+        date (str): 날짜
+        batch (int): 배치 번호
+    Yields:
+        dict: 추출된 데이터
+    """
     paths = _get_extracted_data_paths(s3, bucket, car_id, date, batch)
     if not paths:
         logger.info("No data found in the extracted directory")
@@ -119,6 +168,15 @@ def _read_extracted_data(s3: Any, bucket: str, car_id: str, date: str, batch: in
             raise
 
 def _split_data(data: dict, car_id: str, batch_datetime: str) -> tuple[dict, list[dict]]:
+    """
+    추출된 데이터를 post와 comment로 분리
+    Args:
+        data (dict): 추출된 데이터
+        car_id (str): 차량 ID
+        batch_datetime (str): 배치 시간
+    Returns:
+        tuple[dict, list[dict]]: post와 comment로 분리된 데이터
+    """
     community = data['community']
     post_id = f"{community}_post_{data['post_id']}"
     
@@ -176,14 +234,30 @@ def _split_data(data: dict, car_id: str, batch_datetime: str) -> tuple[dict, lis
 
     return post, comments
 
-def _upload_id_set(s3: Any, bucket: str, id_set: set[str]):
+def _upload_id_set(s3: Any, bucket: str, id_set: set[str]) -> None:
+    """
+    ID 집합을 S3에 업로드
+    Args:
+        s3 (Any): boto3 S3 클라이언트
+        bucket (str): S3 버킷 이름
+        id_set (set[str]): ID 집합
+    """
     try:
         text = "\n".join(id_set)
         s3.put_object(Bucket=bucket, Key=ID_PATH, Body=text)
     except Exception as e:
         logger.error(f"Error uploading id set: {str(e)}")
 
-def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str):
+def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str) -> None:
+    """
+    추출된 데이터를 Parquet 파일로 합침
+    Args:
+        bucket (str): S3 버킷 이름
+        car_id (str): 차량 ID
+        date (str): 날짜
+        batch (int): 배치 번호
+        batch_datetime (str): 배치 시간
+    """
     s3 = boto3.client("s3")
     extracted_data = _read_extracted_data(s3, bucket, car_id, date, batch)
     id_set = read_id_set(s3, bucket)
@@ -270,6 +344,14 @@ def combine(bucket: str, car_id: str, date: str, batch: int, batch_datetime: str
     _upload_id_set(s3, bucket, id_set)
 
 def lambda_handler(event, context):
+    """
+    Lambda 핸들러 함수
+    Args:
+        event (dict): Lambda 함수 호출 시 전달되는 이벤트 데이터
+        context (object): Lambda 함수 실행 컨텍스트
+    Returns:
+        dict: Lambda 함수 실행 결과
+    """
     start_time = datetime.now()
     try:
 
