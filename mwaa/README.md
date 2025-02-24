@@ -10,13 +10,13 @@
 ```
 📦bucket
  ┣ 📂dags
- ┃ ┣ 📂configs			# 설정 관련
- ┃ ┣ 📂modules			# 각종 Task 및 상수 정의
- ┃ ┣ 📂test				# 테스트용 DAG
- ┃ ┣ 📂utils			# 유틸리티
- ┃ ┗ 📜workflow.py		# 메인 DAG
- ┣ 📜requirements.txt	# 패키지 목록(비어 있음)
- ┗ 📜startup.sh			# 시작 시 실행 스크립트(비어 있음)
+ ┃ ┣ 📂configs         # 설정 관련
+ ┃ ┣ 📂modules         # 각종 Task 및 상수 정의
+ ┃ ┣ 📂test            # 테스트용 DAG
+ ┃ ┣ 📂utils           # 유틸리티
+ ┃ ┗ 📜workflow.py     # 메인 DAG
+ ┣ 📜requirements.txt  # 패키지 목록(비어 있음)
+ ┗ 📜startup.sh        # 시작 시 실행 스크립트(비어 있음)
 ```
 
 ## 메인 DAG
@@ -33,7 +33,7 @@
 
 #### 2. Lambda를 호출하여 게시글과 댓글을 추출한 뒤 Parquet로 병합하여 S3에 적재합니다.
 
-* 추출 결과를 집계해 Slack으로 알림을 전송합니다.
+* 추출 결과를 집계하여 Slack으로 알림을 전송합니다.
 * 각 추출 작업이 실패하더라도 다음 작업이 수행됩니다.
 
 ![Image](https://github.com/user-attachments/assets/7364e1de-a5e8-4f95-bd63-bdb4fc61ca59)
