@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "mwaa_setup"
+version = "0.1.0"
+description = ""
+authors = ["reudekx <reudekx@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+apache-airflow = "^2.10.5"
+apache-airflow-providers-amazon = {version = "9.0.0", extras = ["aiobotocore"]}
+apache-airflow-providers-slack = "^9.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.1.0"
+isort = "^6.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
