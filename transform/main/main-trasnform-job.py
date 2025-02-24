@@ -199,7 +199,7 @@ def split_content_to_sentences(df):
     return df
 
 
-def transform_static_data(post_df: DataFrame | None, comment_df: DataFrame | None) -> None:
+def transform_static_data(post_df: DataFrame, comment_df: DataFrame) -> None:
     """
     게시글 및 댓글의 정적 데이터를 변환 및 처리하여 민감한 정보를 처리하고,
     내용을 문장 단위로 분할한 후 지정된 출력 디렉토리에 저장합니다.
