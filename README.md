@@ -1,5 +1,7 @@
 # DE 2팀 리포지토리입니다.
 
+## 팀원 소개
+
 <table width="100%">
 <tbody><tr>
     <td width="33.33%" align="center"><b>공도한</b></td>
@@ -22,3 +24,7 @@
     <td align="center">DE</td>
 </tr>
 </tbody></table>
+
+## 아키텍처
+
+![Image](https://github.com/user-attachments/assets/a66f423b-1965-40a0-b149-cb2d4b69ae3c)
