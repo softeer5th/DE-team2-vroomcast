@@ -3,6 +3,7 @@ from typing import Any
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from pendulum import timezone
 
 from utils.xcom import create_push_to_xcom_task, pull_from_xcom
 
@@ -22,13 +23,16 @@ def create_push_time_info_task(
 
 
 def create_push_start_time_task(dag: DAG) -> PythonOperator:
-    current_time = datetime.now()
+
+    KST = timezone("Asia/Seoul")
+    current_datetime = datetime.now(KST)
+
     return create_push_to_xcom_task(
         dag,
         "start_time",
         {
-            "date": current_time.strftime("%Y-%m-%d"),
-            "time": current_time.strftime("%H:%M:%S"),
+            "date": current_datetime.strftime("%Y-%m-%d"),
+            "time": current_datetime.strftime("%H:%M:%S"),
         },
     )
 
