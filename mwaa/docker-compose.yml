@@ -1,0 +1,79 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      AIRFLOW_HOME: ${AIRFLOW_HOME:-/opt/airflow}
+  # 환경 변수
+  environment: &airflow-common-env
+    # 기본 환경 변수
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Seoul
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__LOGGING__BASE_LOG_FOLDER: ${AIRFLOW_HOME:-/opt/airflow}/logs
+    AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:-ramdom-secret-key}
+    AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: 8793
+    # AWS 자격증명
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+    # Airflow Variables
+    AIRFLOW_VAR_S3_BUCKET: ${AIRFLOW_VAR_S3_BUCKET}
+    AIRFLOW_VAR_S3_CONFIG_BUCKET: ${AIRFLOW_VAR_S3_CONFIG_BUCKET}
+    AIRFLOW_VAR_BATCH_INTERVAL_MINUTES: ${AIRFLOW_VAR_BATCH_INTERVAL_MINUTES:-30}
+    AIRFLOW_VAR_BATCH_DURATION_HOURS: ${AIRFLOW_VAR_BATCH_DURATION_HOURS:-24}
+    # Slack Variables
+    AIRFLOW_VAR_SLACK_WEBHOOK_URL: ${AIRFLOW_VAR_SLACK_WEBHOOK_URL}
+  # 필요한 볼륨 마운트
+  volumes:
+    - ./bucket/dags:${AIRFLOW_HOME:-/opt/airflow}/dags
+    - ./bucket/configs:${AIRFLOW_HOME:-/opt/airflow}/configs
+  # 의존성 설정
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres: # Airflow의 메타 데이터를 저장하는 데이터베이스
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+  airflow-init: # Airflow 초기화: 데이터베이스 초기화 및 관리자 계정 생성
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command: -c "airflow db init && airflow users create --username admin --password admin --firstname Anonymous --lastname Admin --role Admin --email admin@example.com"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow-webserver: # Airflow의 웹 UI를 제공
+    <<: *airflow-common
+    command: airflow webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  airflow-scheduler: # DAG 정보를 파싱하고 작업을 스케줄링 및 모니터링
+    <<: *airflow-common
+    command: airflow scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
