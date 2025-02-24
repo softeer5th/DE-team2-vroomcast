@@ -2,8 +2,10 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from modules.notificator import create_notificate_extract_task
-from utils.time import create_push_time_task
+
+from modules.notificator import (create_notificate_all_done_task,
+                                 create_notificate_extract_task)
+from utils.time import create_push_start_time_task, create_push_time_info_task
 
 """
 알림 기능 테스트
@@ -28,7 +30,10 @@ with DAG(
     # 하루의 시작(00:00)부터 몇 분이 지났는지
     batch = "{{ (execution_date.in_timezone('Asia/Seoul').hour * 60) + execution_date.in_timezone('Asia/Seoul').minute }}"
 
-    push_time_task = create_push_time_task(dag, ref_date, ref_time, batch)
+    push_time_info_task = create_push_time_info_task(dag, ref_date, ref_time, batch)
+
+    # Push Start Time Information 태스크 생성 (실제 실행 시간 기준)
+    push_start_time_task = create_push_start_time_task(dag)
 
     # 더미 데이터 반환 함수
     def aggregate(**context):
@@ -105,4 +110,13 @@ with DAG(
     # 알림 태스크 생성
     notificate_task = create_notificate_extract_task(dag)
 
-    push_time_task >> aggregate_task >> notificate_task
+    # Notificate All Done 태스크 생성
+    notificate_all_done_task = create_notificate_all_done_task(dag)
+
+    (
+        push_time_info_task
+        >> push_start_time_task
+        >> aggregate_task
+        >> notificate_task
+        >> notificate_all_done_task
+    )

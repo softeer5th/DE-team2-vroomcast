@@ -2,11 +2,10 @@ import logging
 from datetime import datetime
 
 from airflow import DAG
-from modules.transformer import (
-    create_check_emr_termination_task,
-    create_execute_emr_task,
-    create_terminate_emr_cluster_task,
-)
+
+from modules.transformer import (create_check_emr_termination_task,
+                                 create_execute_emr_task,
+                                 create_terminate_emr_cluster_task)
 from utils.xcom import create_push_to_xcom_task, pull_from_xcom
 
 logger = logging.getLogger(__name__)

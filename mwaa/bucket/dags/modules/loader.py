@@ -1,17 +1,11 @@
 from airflow import DAG
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
-from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
-from modules.constants import (
-    CARS,
-    DYNAMIC_MAPPINGS,
-    DYNAMIC_PATH,
-    POST_CAR_MAPPING,
-    POST_CAR_PATH,
-    S3_BUCKET,
-    STATIC_MAPPINGS,
-    STATIC_PATH,
-    TableMapping,
-)
+from airflow.providers.amazon.aws.transfers.s3_to_redshift import \
+    S3ToRedshiftOperator
+
+from modules.constants import (CARS, DYNAMIC_MAPPINGS, DYNAMIC_PATH,
+                               POST_CAR_MAPPING, POST_CAR_PATH, S3_BUCKET,
+                               STATIC_MAPPINGS, STATIC_PATH, TableMapping)
 
 
 def create_load_static_to_redshift_task(
@@ -42,6 +36,7 @@ def create_load_static_to_redshift_task(
         s3_key=STATIC_PATH.format(
             date=date, batch=batch, parquet=table_mapping.parquet
         ),
+        column_list=table_mapping.columns,
         copy_options=[
             "FORMAT PARQUET",
         ],
@@ -102,6 +97,7 @@ def create_load_dynamic_to_redshift_task(
         s3_key=DYNAMIC_PATH.format(
             car_id=car_id, date=date, batch=batch, parquet=table_mapping.parquet
         ),
+        column_list=table_mapping.columns,
         copy_options=[
             "FORMAT PARQUET",
         ],
@@ -164,6 +160,7 @@ def create_load_post_car_to_redshift_task(
         table=table_mapping.table,
         s3_bucket=S3_BUCKET,
         s3_key=POST_CAR_PATH.format(car_id=car_id, date=date, batch=batch),
+        column_list=table_mapping.columns,
         copy_options=[
             "FORMAT PARQUET",
         ],

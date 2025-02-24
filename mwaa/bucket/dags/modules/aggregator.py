@@ -2,10 +2,12 @@ import logging
 
 from airflow.models import DAG
 from airflow.operators.python import PythonOperator
+
 from modules.constants import CARS, COMMUNITIES
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 def create_aggregate_task(dag: DAG) -> PythonOperator:
     """
@@ -15,6 +17,7 @@ def create_aggregate_task(dag: DAG) -> PythonOperator:
     Returns:
         PythonOperator: Task
     """
+
     def _aggregate(**context) -> dict:
         """
         모든 추출 Task에 대한 집계를 수행합니다.

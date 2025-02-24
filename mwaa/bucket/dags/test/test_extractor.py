@@ -2,6 +2,7 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.utils.trigger_rule import TriggerRule
+
 from modules.aggregator import create_aggregate_task
 from modules.constants import CARS
 from modules.extractor import create_extract_task
@@ -17,7 +18,7 @@ with DAG(
     default_args={
         "owner": "airflow",
     },
-    params={ # Web UI에서 설정 가능한 파라미터
+    params={  # Web UI에서 설정 가능한 파라미터
         "community": "bobaedream",
         "date": "2020-01-05",
         "batch": 0,

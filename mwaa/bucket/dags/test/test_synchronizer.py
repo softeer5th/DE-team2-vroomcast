@@ -3,8 +3,9 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+
 from modules.synchronizer import create_synchronize_task
-from utils.time import create_push_time_task
+from utils.time import create_push_time_info_task
 from utils.xcom import pull_from_xcom
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ with DAG(
     batch = "{{ (execution_date.in_timezone('Asia/Seoul').hour * 60) + execution_date.in_timezone('Asia/Seoul').minute }}"
 
     # 현재 시간 정보를 XCom에 저장
-    push_time_task = create_push_time_task(dag, ref_date, ref_time, batch)
+    push_time_task = create_push_time_info_task(dag, ref_date, ref_time, batch)
 
     # S3에 저장된 배치 정보를 읽고 현재 배치 정보를 갱신
     synchronize_task = create_synchronize_task(dag, "test_batch.json")

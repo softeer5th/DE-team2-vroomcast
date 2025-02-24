@@ -1,9 +1,9 @@
 import json
 
 from airflow import DAG
-from airflow.providers.amazon.aws.operators.lambda_function import (
-    LambdaInvokeFunctionOperator,
-)
+from airflow.providers.amazon.aws.operators.lambda_function import \
+    LambdaInvokeFunctionOperator
+
 from modules.constants import S3_BUCKET
 
 
