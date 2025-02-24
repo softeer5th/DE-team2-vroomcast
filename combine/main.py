@@ -4,11 +4,7 @@ import os
 from datetime import datetime
 from itertools import islice
 import re
-<<<<<<< HEAD
-from typing import Any
-=======
 from typing import Any, Generator
->>>>>>> 70e09d3 (docs: add comments)
 
 import boto3
 import pyarrow as pa
