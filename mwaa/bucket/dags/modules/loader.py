@@ -1,17 +1,11 @@
 from airflow import DAG
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
-from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
-from modules.constants import (
-    CARS,
-    DYNAMIC_MAPPINGS,
-    DYNAMIC_PATH,
-    POST_CAR_MAPPING,
-    POST_CAR_PATH,
-    S3_BUCKET,
-    STATIC_MAPPINGS,
-    STATIC_PATH,
-    TableMapping,
-)
+from airflow.providers.amazon.aws.transfers.s3_to_redshift import \
+    S3ToRedshiftOperator
+
+from modules.constants import (CARS, DYNAMIC_MAPPINGS, DYNAMIC_PATH,
+                               POST_CAR_MAPPING, POST_CAR_PATH, S3_BUCKET,
+                               STATIC_MAPPINGS, STATIC_PATH, TableMapping)
 
 
 def create_load_static_to_redshift_task(

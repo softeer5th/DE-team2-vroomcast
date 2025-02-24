@@ -1,32 +1,31 @@
 from airflow import DAG
 from airflow.providers.amazon.aws.operators.emr import (
-    EmrCreateJobFlowOperator,
-    EmrTerminateJobFlowOperator,
-)
+    EmrCreateJobFlowOperator, EmrTerminateJobFlowOperator)
 from airflow.providers.amazon.aws.sensors.emr import EmrJobFlowSensor
 from airflow.utils.context import Context
+
 from modules.constants import CARS, S3_BUCKET, S3_CONFIG_BUCKET
 from utils.time import pull_time_info
 from utils.xcom import pull_from_xcom
 
 # EMR 클러스터 설정을 위한 상수
 EMR_CONFIG = {
-    "RELEASE_LABEL": "emr-7.7.0", # EMR 버전
-    "INSTANCE_TYPE_MASTER": "m5.xlarge", # 마스터 노드 인스턴스 타입
-    "INSTANCE_TYPE_CORE": "m5.xlarge", # 코어 노드 인스턴스 타입
-    "CORE_INSTANCE_COUNT": 2, # 코어 노드 인스턴스 개수
-    "APPLICATIONS": [ # 사용할 애플리케이션
+    "RELEASE_LABEL": "emr-7.7.0",  # EMR 버전
+    "INSTANCE_TYPE_MASTER": "m5.xlarge",  # 마스터 노드 인스턴스 타입
+    "INSTANCE_TYPE_CORE": "m5.xlarge",  # 코어 노드 인스턴스 타입
+    "CORE_INSTANCE_COUNT": 2,  # 코어 노드 인스턴스 개수
+    "APPLICATIONS": [  # 사용할 애플리케이션
         {"Name": "Hadoop"},
         {"Name": "Hive"},
         {"Name": "JupyterEnterpriseGateway"},
         {"Name": "Livy"},
         {"Name": "Spark"},
     ],
-    "AUTO_TERMINATION_IDLE_TIMEOUT": 1800, # 클러스터 자동 종료 시간
+    "AUTO_TERMINATION_IDLE_TIMEOUT": 1800,  # 클러스터 자동 종료 시간
 }
 
 
-def get_emr_job_flow_overrides(): # EMR 클러스터 설정 반환
+def get_emr_job_flow_overrides():  # EMR 클러스터 설정 반환
     return {
         "Name": "mainTransformCluster",
         "LogUri": "{{ var.value.emr_base_log_uri }}/{{ ts_nodash }}/",
@@ -66,9 +65,9 @@ def get_emr_job_flow_overrides(): # EMR 클러스터 설정 반환
         "AutoTerminationPolicy": {
             "IdleTimeout": EMR_CONFIG["AUTO_TERMINATION_IDLE_TIMEOUT"]
         },
-        "Steps": [ # EMR 클러스터에서 실행할 스텝 목록 (각 스텝은 하나의 Job Flow)
-            { # 정적 데이터 변환 Spark Job
-                "Name": "Run Transform Static Spark Job", 
+        "Steps": [  # EMR 클러스터에서 실행할 스텝 목록 (각 스텝은 하나의 Job Flow)
+            {  # 정적 데이터 변환 Spark Job
+                "Name": "Run Transform Static Spark Job",
                 "ActionOnFailure": "CONTINUE",
                 "HadoopJarStep": {
                     "Jar": "command-runner.jar",
@@ -89,7 +88,7 @@ def get_emr_job_flow_overrides(): # EMR 클러스터 설정 반환
                     ],
                 },
             },
-            { # 동적 데이터 변환 Spark Job
+            {  # 동적 데이터 변환 Spark Job
                 "Name": "Run Transform Dynamic Spark Job",
                 "ActionOnFailure": "CONTINUE",
                 "HadoopJarStep": {
@@ -132,6 +131,7 @@ def get_emr_job_flow_overrides(): # EMR 클러스터 설정 반환
         ],
     }
 
+
 def create_execute_emr_task(dag: DAG) -> EmrCreateJobFlowOperator:
     """
     EMR 클러스터 생성 Task를 생성합니다.
@@ -145,6 +145,7 @@ def create_execute_emr_task(dag: DAG) -> EmrCreateJobFlowOperator:
         job_flow_overrides=get_emr_job_flow_overrides(),
         dag=dag,
     )
+
 
 def create_check_emr_termination_task(dag: DAG) -> EmrJobFlowSensor:
     """
