@@ -114,6 +114,8 @@ def format_slack_messages(alerts_df):
     slack_messages = []
     header_text = ":rotating_light: *조회 집계 경고* :rotating_light:"
     for _, row in alerts_df.iterrows():
+        if row['total_view'] < 500:
+            continue
         body_text = (
             f"*🕒 기준 시간:* {current_time:%Y-%m-%d %H:%M:%S}\n\n"
             f"🚗 *Car:* `{row['car_id']}`\n\n🏆 *Category:* `{row['category']}`\n\n"
