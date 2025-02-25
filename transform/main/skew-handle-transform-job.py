@@ -231,11 +231,10 @@ def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_sk
 
     # optimize_skew인 경우, explode로 인한 skewing이 일어나기 전에, 미리 데이터를 쪼개놓는다.
     if optimize_skew:
-        pre_sentence_df = pre_sentence_df.withColumn("sentence_length", length(col("content")))
-        window_spec = Window.orderBy("source_id").rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        pre_sentence_df = pre_sentence_df.withColumn("cumulative_length", sum(col("sentence_length")).over(window_spec))
-        partition_size = 100000
-        pre_sentence_df = pre_sentence_df.withColumn("partition_id", (col("cumulative_length") / partition_size).cast("int"))
+        pre_sentence_df = pre_sentence_df.withColumns({
+            "sentence_length": length(col("content")),
+            "cumulative_length": sum(col("sentence_length")).over(Window.orderBy("source_id")),
+        }).withColumn("partition_id", (col("cumulative_length") / 100000).cast("int"))
         pre_sentence_df = pre_sentence_df.repartitionByRange(col("partition_id"))
 
     total_sentence_df = split_content_to_sentences(pre_sentence_df)
