@@ -77,7 +77,7 @@ if __name__ == "__main__":
             after_dynamic_post_df = spark.read.parquet(s3_after_dynamic_post)
             vector_dynamic_post_df = vector_dynamic_post(before_dynamic_post_df, after_dynamic_post_df)
             vector_dynamic_post_df.select(
-                'id', 'extracted_at', 'v_upvote_count', 'v_downvote_count'
+                'id', 'extracted_at', 'v_view_count', 'v_upvote_count', 'v_downvote_count', 'v_comment_count'
             ).write.mode("overwrite").parquet(f"{s3_after_dynamic_post.rsplit('/', 1)[0]}/vector_dynamic_post")
         except AnalysisException:
             continue
@@ -92,7 +92,7 @@ if __name__ == "__main__":
             after_dynamic_comment_df = spark.read.parquet(s3_after_dynamic_comment)
             vector_dynamic_comment_df = vector_dynamic_post(before_dynamic_comment_df, after_dynamic_comment_df)
             vector_dynamic_comment_df.select(
-                'id', 'extracted_at', 'v_view_count', 'v_upvote_count', 'v_downvote_count', 'v_comment_count'
+                'id', 'extracted_at', 'v_upvote_count', 'v_downvote_count'
             ).write.mode("overwrite").parquet(f"{s3_after_dynamic_comment.rsplit('/', 1)[0]}/vector_dynamic_comment")
         except AnalysisException:
             continue
