@@ -1,3 +1,4 @@
+import pyspark.sql.functions as F
 from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
@@ -230,12 +231,15 @@ def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_sk
         pre_sentence_df = pre_comment_df
 
     # optimize_skew인 경우, explode로 인한 skewing이 일어나기 전에, 미리 데이터를 쪼개놓는다.
-    if optimize_skew_len:
+    if optimize_skew_len > 0:
         pre_sentence_df = pre_sentence_df.withColumns({
             "sentence_length": length(col("content")),
             "cumulative_length": sum(col("sentence_length")).over(Window.orderBy("source_id")),
-        }).withColumn("partition_id", (col("cumulative_length") / optimize_skew_len).cast("int"))
+        }).withColumn("partition_id", round(col("cumulative_length") / lit(optimize_skew_len)).cast("int"))
         pre_sentence_df = pre_sentence_df.repartitionByRange(col("partition_id"))
+
+    # if optimize_skew_len < 0:
+    #     pre_sentence_df.withColumn("salted_id", concat(col("source_id") + lit("_"), floor(F.rand() * 10)))
 
     total_sentence_df = split_content_to_sentences(pre_sentence_df)
     total_sentence_df = total_sentence_df.cache()
