@@ -192,14 +192,14 @@ def split_content_to_sentences(df):
     return df
 
 
-def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_skew: bool) -> None:
+def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_skew_len: int) -> None:
     """
     게시글 및 댓글 데이터를 변환하여 개인정보를 제거하고 문장 단위로 분할한 후 저장하는 함수.
 
     이 함수는 다음 단계를 수행합니다:
     1. **개인정보 보호 전처리**: 정규식을 이용해 게시글 및 댓글에서 민감한 정보를 제거합니다.
     2. **데이터 병합**: 게시글과 댓글 데이터를 하나의 DataFrame으로 합칩니다.
-    3. **(선택) 데이터 스큐 최적화**: `optimize_skew=True`인 경우, `explode()` 실행 전 데이터를 균등하게 분배하여 스큐 현상을 방지합니다.
+    3. **(선택) 데이터 스큐 최적화**: `optimize_skew`가 0이 아닌 경우, `explode()` 실행 전 데이터를 균등하게 분배하여 스큐 현상을 방지합니다.
     4. **문장 분할**: Pandas UDF(`get_sentences`)를 사용하여 본문을 문장 단위로 변환합니다.
     5. **캐싱**: 문장 데이터를 캐싱하여 이후 연산 성능을 최적화합니다.
     6. **데이터 저장**: 변환된 데이터를 Parquet 포맷으로 저장합니다.
@@ -209,7 +209,7 @@ def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_sk
             제공될 경우, 정규식 기반의 민감한 정보 치환 및 문장 분할을 수행합니다.
         comment_df (DataFrame | None): 댓글 데이터를 포함하는 DataFrame입니다.
             제공될 경우, 정규식 기반의 민감한 정보 치환 및 문장 분할을 수행합니다.
-        optimize_skew (bool): 데이터 스큐 최적화 적용 여부 (`True`이면 `explode()` 이전에 균등 분할 수행).
+        optimize_skew_len (int): 데이터 스큐 최적화 적용을 위한 파티션당 글자 길이.
 
     Returns:
         None
@@ -230,11 +230,11 @@ def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_sk
         pre_sentence_df = pre_comment_df
 
     # optimize_skew인 경우, explode로 인한 skewing이 일어나기 전에, 미리 데이터를 쪼개놓는다.
-    if optimize_skew:
+    if optimize_skew_len:
         pre_sentence_df = pre_sentence_df.withColumns({
             "sentence_length": length(col("content")),
             "cumulative_length": sum(col("sentence_length")).over(Window.orderBy("source_id")),
-        }).withColumn("partition_id", (col("cumulative_length") / 100000).cast("int"))
+        }).withColumn("partition_id", (col("cumulative_length") / optimize_skew_len).cast("int"))
         pre_sentence_df = pre_sentence_df.repartitionByRange(col("partition_id"))
 
     total_sentence_df = split_content_to_sentences(pre_sentence_df)
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     parser.add_argument('--input_post_paths', nargs='+', help='Input parquet file paths')
     parser.add_argument('--input_comment_paths', nargs='+', help='Input parquet file paths')
     parser.add_argument('--output_dir', help='Output path')
-    parser.add_argument('--optimize_skew', action="store_true", help='Enable skew optimization')
+    parser.add_argument('--optimize_skew_len', default=0, help='Enable skew optimization')
     args = parser.parse_args()
     mode = "s3://"
     bucket = args.bucket
@@ -303,5 +303,5 @@ if __name__ == "__main__":
     if post_df is None and comment_df is None:
         logger.error("There are not valid post and comment data.")
         exit(0)
-    transform_static_data(post_df, comment_df, optimize_skew=args.optimize_skew)
+    transform_static_data(post_df, comment_df, optimize_skew_len=args.optimize_skew_len)
     spark.stop()
