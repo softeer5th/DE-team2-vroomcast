@@ -239,11 +239,6 @@ def transform_static_data(post_df: DataFrame, comment_df: DataFrame, optimize_sk
         pre_sentence_df = pre_sentence_df.withColumn("partition_id", (col("cumulative_length") / partition_size).cast("int"))
         pre_sentence_df = pre_sentence_df.repartitionByRange(col("partition_id"))
 
-    if optimize_skew_len < 0:
-        pre_sentence_df.withColumn("salted_id", concat(col("source_id"), lit("_"), F.floor(F.rand() * 10)))
-        pre_sentence_df = pre_sentence_df.repartition(col("salted_id"))
-        pre_sentence_df = pre_sentence_df.drop("salted_id")
-
     total_sentence_df = split_content_to_sentences(pre_sentence_df)
     total_sentence_df = total_sentence_df.cache()
     sentence_df = total_sentence_df.selectExpr("id", "source_id", "from_post", "sentence", "created_at")
