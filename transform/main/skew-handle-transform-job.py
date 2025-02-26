@@ -277,7 +277,7 @@ if __name__ == "__main__":
     parser.add_argument('--input_post_paths', nargs='+', help='Input parquet file paths')
     parser.add_argument('--input_comment_paths', nargs='+', help='Input parquet file paths')
     parser.add_argument('--output_dir', help='Output path')
-    parser.add_argument('--optimize_skew_len', default=0, help='Enable skew optimization')
+    parser.add_argument('--optimize_skew_len', default=0, type=int, help='Enable skew optimization')
     args = parser.parse_args()
     mode = "s3://"
     bucket = args.bucket
