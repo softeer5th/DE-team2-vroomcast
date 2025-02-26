@@ -27,6 +27,8 @@ from modules.transformer import (create_check_emr_termination_task,
                                  create_terminate_emr_cluster_task)
 from utils.time import create_push_start_time_task, create_push_time_info_task
 
+from airflow.utils.task_group import TaskGroup
+
 """
 Vroomcast 데이터 파이프라인 워크플로우
 """
@@ -154,17 +156,6 @@ with DAG(
     # 감성 분석 태스크 생성
     analyze_sentiment_task = create_analyze_sentiment_task(dag, ref_date, batch)
 
-    # Redshift로의 적재 태스크 생성
-    load_dynamic_to_redshift_tasks = create_load_dynamic_to_redshift_tasks(
-        dag, ref_date, batch
-    )
-    load_post_car_to_redshift_tasks = create_load_post_car_to_redshift_tasks(
-        dag, ref_date, batch
-    )
-    load_transformed_to_redshift_tasks = create_load_static_to_redshift_tasks(
-        dag, ref_date, batch
-    )
-
     # Social Alert 태스크 생성
     social_alert_task = create_social_alert_task(dag)
     social_alert_task.trigger_rule = TriggerRule.ALL_DONE
@@ -173,24 +164,30 @@ with DAG(
     notificate_all_done_task = create_notificate_all_done_task(dag)
     notificate_all_done_task.trigger_rule = TriggerRule.ALL_DONE
 
-    # Terminated EMR >> Analyze Sentiment >> Load Transformed to Redshift
+    with TaskGroup(group_id='load_group') as load_group:
+        # Redshift로의 적재 태스크 생성
+        load_dynamic_to_redshift_tasks = create_load_dynamic_to_redshift_tasks(
+            dag, ref_date, batch
+        )
+        load_post_car_to_redshift_tasks = create_load_post_car_to_redshift_tasks(
+            dag, ref_date, batch
+        )
+        load_transformed_to_redshift_tasks = create_load_static_to_redshift_tasks(
+            dag, ref_date, batch
+        )
+
+        load_tasks = load_dynamic_to_redshift_tasks + load_post_car_to_redshift_tasks + load_transformed_to_redshift_tasks
+
+    # Task Pool 설정 (Web UI에서 최대 3개로 제한)
+    for task in load_tasks:
+        task.pool = "load_pool"
+        task.pool_slots = 1
+
+    # Terminated EMR >> Analyze Sentiment >> Load Group >> Social Alert >> Notificate All Done
     (
         terminate_emr_cluster_task
         >> analyze_sentiment_task
-        >> load_transformed_to_redshift_tasks
+        >> load_group
+        >> social_alert_task 
+        >> notificate_all_done_task
     )
-
-    for load_dynamic_to_redshift_task in load_dynamic_to_redshift_tasks:
-        load_dynamic_to_redshift_task.trigger_rule = TriggerRule.ALL_DONE
-
-    # Load Transformed to Redshift >> Load Dynamic to Redshift
-    cross_downstream(load_transformed_to_redshift_tasks, load_dynamic_to_redshift_tasks)
-
-    for load_post_car_to_redshift_task in load_post_car_to_redshift_tasks:
-        load_post_car_to_redshift_task.trigger_rule = TriggerRule.ALL_DONE
-
-    # Load Dynamic to Redshift >> Load Post Car to Redshift
-    cross_downstream(load_dynamic_to_redshift_tasks, load_post_car_to_redshift_tasks)
-
-    # Load Post Car to Redshift >> Social Alert >> Notificate All Done
-    load_post_car_to_redshift_tasks >> social_alert_task >> notificate_all_done_task
