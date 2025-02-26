@@ -1,5 +1,5 @@
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession, Window
+from pyspark.sql import SparkSession, Window, DataFrame
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
