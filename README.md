@@ -33,7 +33,7 @@
 
 ## 아키텍처
 
-![Image](https://github.com/user-attachments/assets/a66f423b-1965-40a0-b149-cb2d4b69ae3c)
+![Image](https://github.com/user-attachments/assets/67f5d9eb-efdb-40fd-8fb7-83ee8ff554c1)
 
 ## 팀원 소개
 
